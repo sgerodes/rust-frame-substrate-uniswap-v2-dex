@@ -1,4 +1,5 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/6Wn1Dsn4)
+
 # PBA Assignment - FRAME
 
 ## !! See [ASSIGNMENT.md](./ASSIGNMENT.md) for instructions to complete this assignment !!
@@ -23,6 +24,9 @@ To test while developing, without a full build (thus reduce time to results):
 cargo t -p pallet-dex
 cargo t -p pallet-dpos
 cargo t -p pallet-voting
+cargo t -p pallet-free-tx
+cargo t -p pallet-multisig
+cargo t -p pallet-treasury
 cargo t -p <other crates>
 ```
 

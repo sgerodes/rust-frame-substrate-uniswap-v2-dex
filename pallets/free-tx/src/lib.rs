@@ -19,13 +19,13 @@ pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
 	<T as frame_system::Config>::AccountId,
 >>::Balance;
 
-use frame_support::sp_runtime::traits::Convert;
-use frame_system::pallet_prelude::BlockNumberFor;
+use frame_support::dispatch::{Dispatchable, GetDispatchInfo};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use crate::*;
-	use frame_system::pallet_prelude::*;
+	use frame_system::{pallet_prelude::*, RawOrigin};
+	use sp_std::prelude::*;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -44,9 +44,11 @@ pub mod pallet {
 			+ fungible::freeze::Inspect<Self::AccountId>
 			+ fungible::freeze::Mutate<Self::AccountId>;
 
-		/// A helper to convert a block number to a balance type. Might be helpful if you need to do
-		/// math across these two types.
-		type BlockNumberToBalance: Convert<BlockNumberFor<Self>, BalanceOf<Self>>;
+		/// A type representing all calls available in your runtime.
+		#[pallet::no_default_bounds]
+		type RuntimeCall: Parameter
+			+ Dispatchable<RuntimeOrigin = Self::RuntimeOrigin>
+			+ GetDispatchInfo;
 	}
 
 	// The pallet's runtime storage items.
@@ -62,16 +64,15 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored { something: u32, who: T::AccountId },
+		/// Events should be documented.
+		TxSuccess,
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
 		/// Error names should be descriptive.
-		NoneValue,
+		TxFailed,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
 	}
@@ -81,55 +82,43 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
+		/// An example dispatchable that charges no fee if successful.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
-
-			// Update storage.
-			<Something<T>>::put(something);
-
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::default())]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
+		pub fn free_tx(origin: OriginFor<T>, success: bool) -> DispatchResultWithPostInfo {
 			let _who = ensure_signed(origin)?;
 
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
+			// If this line fails, the user ends up paying a fee.
+			ensure!(success, Error::<T>::TxFailed);
+
+			// Deposit a basic event.
+			Self::deposit_event(Event::<T>::TxSuccess);
+
+			// This line tells the runtime to refund any fee taken, making the tx free.
+			Ok(Pays::No.into())
+		}
+
+		/// An example of re-dispatching a call
+		#[pallet::call_index(1)]
+		#[pallet::weight(call.get_dispatch_info().weight)]
+		pub fn redispatch(
+			origin: OriginFor<T>,
+			call: Box<<T as Config>::RuntimeCall>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Re-dispatch some call on behalf of the caller.
+			let res = call.dispatch(RawOrigin::Signed(who).into());
+
+			// Turn the result from the `dispatch` into our expected `DispatchResult` type.
+			res.map(|_| ()).map_err(|e| e.error)
 		}
 	}
 }
 
 impl<T: Config> Pallet<T> {
-	/// An example of how to get the current block from the FRAME System Pallet.
-	pub fn get_current_block_number() -> BlockNumberFor<T> {
-		frame_system::Pallet::<T>::block_number()
-	}
-
-	/// An example of how to convert a block number to the balance type.
-	pub fn convert_block_number_to_balance(block_number: BlockNumberFor<T>) -> BalanceOf<T> {
-		T::BlockNumberToBalance::convert(block_number)
+	/// Get the weight of a call.
+	pub fn call_weight(call: <T as Config>::RuntimeCall) -> Weight {
+		call.get_dispatch_info().weight
 	}
 }

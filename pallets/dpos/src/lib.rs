@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::{dispatch::Vec, pallet_prelude::*, traits::fungible};
+use frame_support::traits::fungible;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
@@ -88,7 +88,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// An example of directly updating the authorities for Aura.
 		#[pallet::call_index(0)]
-		#[pallet::weight(u64::default())]
+		#[pallet::weight(Weight::default())]
 		pub fn force_change_authorities(
 			origin: OriginFor<T>,
 			who: T::AuthorityId,
@@ -103,7 +103,7 @@ pub mod pallet {
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		#[pallet::call_index(1)]
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		#[pallet::weight(Weight::default())]
 		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			// This function will return an error if the extrinsic is not signed.
@@ -147,39 +147,5 @@ pub mod pallet {
 		pub fn set_test_author(who: T::AccountId) {
 			TestBlockAuthor::<T>::put(who);
 		}
-	}
-}
-
-// Look at `../interface/` to better understand this API.
-impl<T: Config> pba_interface::DposInterface for Pallet<T> {
-	type AccountId = T::AccountId;
-	type StakingBalance = <T::NativeBalance as fungible::Inspect<Self::AccountId>>::Balance;
-
-	fn setup_account(_who: Self::AccountId, _amount: Self::StakingBalance) -> DispatchResult {
-		unimplemented!()
-	}
-
-	fn balance(_who: Self::AccountId) -> Self::StakingBalance {
-		unimplemented!()
-	}
-
-	fn register_validator(_who: Self::AccountId) -> DispatchResult {
-		unimplemented!()
-	}
-
-	fn delegate(
-		_delegator: Self::AccountId,
-		_validator: Self::AccountId,
-		_amount: Self::StakingBalance,
-	) -> DispatchResult {
-		unimplemented!()
-	}
-
-	fn get_winning_validators(_max_validators: u32) -> Result<Vec<Self::AccountId>, DispatchError> {
-		unimplemented!()
-	}
-
-	fn get_validator_stake(_who: Self::AccountId) -> Option<Self::StakingBalance> {
-		unimplemented!()
 	}
 }

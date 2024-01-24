@@ -51,6 +51,9 @@ frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, g
 pallet-dex = { version = "4.0.0-dev", default-features = false, path = "../pallets/dex" }
 pallet-dpos = { version = "4.0.0-dev", default-features = false, path = "../pallets/dpos" }
 pallet-voting = { version = "4.0.0-dev", default-features = false, path = "../pallets/voting" }
+pallet-multisig = { version = "4.0.0-dev", default-features = false, path = "../pallets/multisig" }
+pallet-treasury = { version = "4.0.0-dev", default-features = false, path = "../pallets/treasury" }
+pallet-free-tx = { version = "4.0.0-dev", default-features = false, path = "../pallets/free-tx" }
 
 [build-dependencies]
 substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/paritytech/substrate.git", optional = true , branch = "polkadot-v1.0.0" }
@@ -71,6 +74,9 @@ std = [
 	"pallet-dex/std",
 	"pallet-dpos/std",
 	"pallet-voting/std",
+	"pallet-multisig/std",
+	"pallet-treasury/std",
+	"pallet-free-tx/std",
 	"pallet-assets/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
@@ -105,6 +111,9 @@ runtime-benchmarks = [
 	"pallet-dex/runtime-benchmarks",
 	"pallet-dpos/runtime-benchmarks",
 	"pallet-voting/runtime-benchmarks",
+	"pallet-multisig/runtime-benchmarks",
+	"pallet-treasury/runtime-benchmarks",
+	"pallet-free-tx/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
@@ -121,6 +130,9 @@ try-runtime = [
 	"pallet-dex/try-runtime",
 	"pallet-dpos/try-runtime",
 	"pallet-voting/try-runtime",
+	"pallet-multisig/try-runtime",
+	"pallet-treasury/try-runtime",
+	"pallet-free-tx/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
 ]

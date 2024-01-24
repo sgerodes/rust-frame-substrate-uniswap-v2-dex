@@ -19,13 +19,15 @@ pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
 	<T as frame_system::Config>::AccountId,
 >>::Balance;
 
-use frame_support::sp_runtime::traits::Convert;
-use frame_system::pallet_prelude::BlockNumberFor;
+use sp_io::hashing::blake2_256;
+use sp_runtime::traits::TrailingZeroInput;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use crate::*;
+	use frame_support::dispatch::{Dispatchable, GetDispatchInfo, RawOrigin};
 	use frame_system::pallet_prelude::*;
+	use sp_std::prelude::*;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -44,9 +46,11 @@ pub mod pallet {
 			+ fungible::freeze::Inspect<Self::AccountId>
 			+ fungible::freeze::Mutate<Self::AccountId>;
 
-		/// A helper to convert a block number to a balance type. Might be helpful if you need to do
-		/// math across these two types.
-		type BlockNumberToBalance: Convert<BlockNumberFor<Self>, BalanceOf<Self>>;
+		/// A type representing all calls available in your runtime.
+		#[pallet::no_default_bounds]
+		type RuntimeCall: Parameter
+			+ Dispatchable<RuntimeOrigin = Self::RuntimeOrigin>
+			+ GetDispatchInfo;
 	}
 
 	// The pallet's runtime storage items.
@@ -119,17 +123,30 @@ pub mod pallet {
 				},
 			}
 		}
+
+		/// An example of re-dispatching a call
+		#[pallet::call_index(2)]
+		#[pallet::weight(call.get_dispatch_info().weight)]
+		pub fn redispatch(
+			origin: OriginFor<T>,
+			call: Box<<T as Config>::RuntimeCall>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Re-dispatch some call on behalf of the caller.
+			let res = call.dispatch(RawOrigin::Signed(who).into());
+
+			// Turn the result from the `dispatch` into our expected `DispatchResult` type.
+			res.map(|_| ()).map_err(|e| e.error)
+		}
 	}
 }
 
 impl<T: Config> Pallet<T> {
-	/// An example of how to get the current block from the FRAME System Pallet.
-	pub fn get_current_block_number() -> BlockNumberFor<T> {
-		frame_system::Pallet::<T>::block_number()
-	}
-
-	/// An example of how to convert a block number to the balance type.
-	pub fn convert_block_number_to_balance(block_number: BlockNumberFor<T>) -> BalanceOf<T> {
-		T::BlockNumberToBalance::convert(block_number)
+	/// Derive a unique account id using a seed value.
+	pub fn multi_account_id(seed: u32) -> T::AccountId {
+		let entropy = (b"pba/multisig", seed).using_encoded(blake2_256);
+		Decode::decode(&mut TrailingZeroInput::new(entropy.as_ref()))
+			.expect("infinite length input; no invalid inputs for type; qed")
 	}
 }

@@ -31,6 +31,7 @@ pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 
 #[frame_support::pallet]
 pub mod pallet {
+	use crate::AssetIdOf;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{fungible, fungibles},
@@ -87,11 +88,38 @@ pub mod pallet {
 		StorageOverflow,
 	}
 
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct AssetPair<T: Config> {
+		pub asset_a: AssetIdOf<T>,
+		pub asset_b: AssetIdOf<T>,
+	}
+
+	#[pallet::storage]
+	pub type Pools<T> = StorageMap<_, Blake2_128Concat, AssetPair<T>, bool>;
+
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
 	// These functions materialize as "extrinsics", which are often compared to transactions.
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(Weight::default())]
+		pub fn create_pool(
+			origin: OriginFor<T>,
+			asset_a: AssetIdOf<T>,
+			asset_b: AssetIdOf<T>,
+		) -> DispatchResult {
+			let _ = ensure_signed(origin)?;
+
+			let pair = AssetPair { asset_a, asset_b };
+
+			Pools::<T>::insert(pair, true);
+
+			Ok(())
+		}
+
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		#[pallet::call_index(0)]

@@ -127,7 +127,7 @@ pub mod pallet {
 			// for tests. You can manage this with `set_test_block_author()` provided by this crate.
 			#[cfg(test)]
 			{
-				return TestBlockAuthor::<T>::get()
+				return TestBlockAuthor::<T>::get();
 			}
 
 			// On a real blockchain, you get the author from aura.

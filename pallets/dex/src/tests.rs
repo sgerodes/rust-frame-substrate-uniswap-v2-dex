@@ -22,3 +22,12 @@ fn correct_error_for_none_value() {
 		assert_noop!(Dex::cause_error(RuntimeOrigin::signed(1)), Error::<Test>::NoneValue);
 	});
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::{mock::*, Error};
+	use frame_support::{assert_noop, assert_ok, dispatch::DispatchError};
+	use frame_system::Origin;
+	use pallet_assets::Error as AssetsError;
+}

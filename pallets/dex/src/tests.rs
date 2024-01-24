@@ -22,3 +22,9 @@ fn correct_error_for_none_value() {
 		assert_noop!(Dex::cause_error(RuntimeOrigin::signed(1)), Error::<Test>::NoneValue);
 	});
 }
+
+
+mod my_tests {
+
+}
+

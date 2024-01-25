@@ -31,7 +31,7 @@ pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetIdOf, BalanceOf};
+	use crate::{AssetIdOf, BalanceOf, AssetBalanceOf};
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{fungible, fungibles},
@@ -86,6 +86,10 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+		/// Can not create a pool that already exists
+		DuplicatePoolError,
+		/// Assets in the pool must be distinct
+		DistinctAssetsRequired,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -93,9 +97,25 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+
+		#[pallet::call_index(1)]
+		#[pallet::weight(Weight::default())]
+		pub fn create_pool(
+			origin: OriginFor<T>,
+			asset_a: AssetIdOf<T>,
+			asset_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			// Check origin
+			let who = T::CreatePoolOrigin::ensure_origin(origin)?;
+
+			Ok(())
+		}
+
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::call_index(0)]
+		#[pallet::call_index(100)]
 		#[pallet::weight(Weight::default())]
 		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
@@ -113,7 +133,7 @@ pub mod pallet {
 		}
 
 		/// An example dispatchable that may throw a custom error.
-		#[pallet::call_index(1)]
+		#[pallet::call_index(101)]
 		#[pallet::weight(Weight::default())]
 		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
@@ -132,46 +152,5 @@ pub mod pallet {
 			}
 		}
 
-		//
-		// #[pallet::weight(10_000)] // Placeholder weight, should be adjusted as per benchmarking
-		// pub fn create_pool(
-		// 	origin: OriginFor<T>,
-		// 	token_a_id: AssetIdOf<T>,
-		// 	token_b_id: AssetIdOf<T>,
-		// 	amount_a: BalanceOf<T>,
-		// 	amount_b: BalanceOf<T>,
-		// ) -> DispatchResult {
-		// 	let who = ensure_signed(origin)?;
-		//
-		// 	// Ensure both tokens exist and the user has sufficient balance
-		// 	ensure!(T::Fungibles::exists(token_a_id), Error::<T>::TokenNotFound);
-		// 	ensure!(T::Fungibles::exists(token_b_id), Error::<T>::TokenNotFound);
-		// 	ensure!(
-		//     T::Fungibles::balance(token_a_id, &who) >= amount_a,
-		//     Error::<T>::InsufficientBalance
-		// );
-		// 	ensure!(
-		//     T::Fungibles::balance(token_b_id, &who) >= amount_b,
-		//     Error::<T>::InsufficientBalance
-		// );
-		//
-		// 	// Reserve tokens from user's balance for the pool
-		// 	T::Fungibles::reserve(token_a_id, &who, amount_a)?;
-		// 	T::Fungibles::reserve(token_b_id, &who, amount_b)?;
-		//
-		// 	// Create liquidity pool record
-		// 	let pool = LiquidityPool {
-		// 		token_a: token_a_id,
-		// 		token_b: token_b_id,
-		// 		amount_a,
-		// 		amount_b,
-		// 	};
-		// 	LiquidityPools::<T>::insert((token_a_id, token_b_id), &pool);
-		//
-		// 	// Emit an event for pool creation
-		// 	Self::deposit_event(Event::PoolCreated(who, token_a_id, token_b_id, amount_a, amount_b));
-		//
-		// 	Ok(())
-		// }
 	}
 }

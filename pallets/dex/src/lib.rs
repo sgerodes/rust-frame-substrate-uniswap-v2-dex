@@ -108,7 +108,7 @@ pub mod pallet {
 			amount_b: AssetBalanceOf<T>,
 		) -> DispatchResult {
 			// Check origin
-			let who = T::CreatePoolOrigin::ensure_origin(origin)?;
+			let who = ensure_signed(origin)?;
 
 			Ok(())
 		}

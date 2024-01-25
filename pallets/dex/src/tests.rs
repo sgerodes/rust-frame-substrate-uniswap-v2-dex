@@ -30,4 +30,18 @@ mod tests {
 	use frame_support::{assert_noop, assert_ok, dispatch::DispatchError};
 	use frame_system::Origin;
 	use pallet_assets::Error as AssetsError;
+
+	const ALICE_ID: u64 = 1;
+	const ASSET_1_ID: u32 = 1;
+	const ASSET_2_ID: u32 = 2;
+
+
+	#[test]
+	fn fail_create_pool_with_identical_assets() {
+		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			assert_noop!(Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_1_ID, 10, 20), Error::<Test>::DistinctAssetsRequired);
+		});
+	}
 }

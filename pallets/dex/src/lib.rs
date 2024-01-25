@@ -98,17 +98,18 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 
-		#[pallet::call_index(1)]
+		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
 		pub fn create_pool(
 			origin: OriginFor<T>,
-			asset_a: AssetIdOf<T>,
-			asset_b: AssetIdOf<T>,
-			amount_a: AssetBalanceOf<T>,
-			amount_b: AssetBalanceOf<T>,
+			asset_1: AssetIdOf<T>,
+			asset_2: AssetIdOf<T>,
+			amount_1: AssetBalanceOf<T>,
+			amount_2: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			// Check origin
 			let who = ensure_signed(origin)?;
+			ensure!(asset_1 != asset_2, Error::<T>::DistinctAssetsRequired);
+			// Error::<T>::DuplicatePoolError
 
 			Ok(())
 		}

@@ -42,6 +42,7 @@ pub mod pallet {
 		Hashable,
 	};
 	use frame_system::pallet_prelude::*;
+	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -111,16 +112,14 @@ pub mod pallet {
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
 		/// Can not create a pool that already exists
 		DuplicatePoolError,
 		/// Assets in the pool must be distinct
 		DistinctAssetsRequired,
 		/// Trying to do an operation on a pool that does not exists. Create pool first
 		PoolNotFoundError,
+		/// The number provided in the arithmetics overflow the type bound. Use lower number
+		ArithmeticsOverflow
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -163,20 +162,14 @@ pub mod pallet {
 			ensure!(asset_a != asset_b, Error::<T>::DistinctAssetsRequired);
 			Ok(())
 		}
-	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
-	#[pallet::call]
-	impl<T: Config> Pallet<T> {
-		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::default())]
-		pub fn create_pool(
-			origin: OriginFor<T>,
-			asset_id_a: AssetIdOf<T>,
-			asset_id_b: AssetIdOf<T>,
-		) -> DispatchResult {
+		pub fn calculate_lp_token_amount_for_pair_amounts(amount_a: AssetBalanceOf<T>, amount_b: AssetBalanceOf<T>) -> Result<AssetBalanceOf<T>, DispatchError> {
+			Ok(amount_a.checked_mul(&amount_b)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?
+				.integer_sqrt())
+		}
+
+		pub fn create_pool(origin: OriginFor<T>, asset_id_a: AssetIdOf<T>, asset_id_b: AssetIdOf<T>, ) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
@@ -203,6 +196,26 @@ pub mod pallet {
 
 			Ok(())
 		}
+	}
+
+	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
+	// These functions materialize as "extrinsics", which are often compared to transactions.
+	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
+		#[pallet::weight(Weight::default())]
+		pub fn initialise_pool_with_assets(
+			origin: OriginFor<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			Self::create_pool(origin, asset_id_a, asset_id_b)?;
+
+			Ok(())
+		}
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::default())]
@@ -213,11 +226,12 @@ pub mod pallet {
 			amount_a: AssetBalanceOf<T>,
 			amount_b: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+			let _who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			let pool = Self::get_pool_by_id(&pool_id);
 			ensure!(pool.is_some(), Error::<T>::PoolNotFoundError);
+			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
 
 
 

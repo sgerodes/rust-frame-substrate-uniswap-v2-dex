@@ -38,11 +38,16 @@ pub mod pallet {
 	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::{
 		pallet_prelude::*,
-		traits::{fungible, fungibles},
+		traits::{
+			fungible,
+			fungibles::{self, Mutate},
+			tokens::{Preservation}
+		},
 		Hashable,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot};
+	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot, Zero, AccountIdConversion};
+	use sp_core::hashing::blake2_256;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -58,7 +63,7 @@ pub mod pallet {
 	#[scale_info(skip_type_params(T))]
 	pub struct LiquidityPool<T: Config> {
 		asset_ids: (AssetIdOf<T>, AssetIdOf<T>),
-		balances: (BalanceOf<T>, BalanceOf<T>),
+		balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
 		liquidity_token_id: LpAssetId,
 	}
 
@@ -107,19 +112,32 @@ pub mod pallet {
 			// block_number: T::BlockNumber,
 			// initial_balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
 		},
+		LiquiditySupplied {
+			pool_id: PoolCompositeIdOf<T>,
+			liquidity_token_id: LpAssetId,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+			liquidity_token_minted: AssetBalanceOf<T>,
+		},
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Can not create a pool that already exists
+		/// Can not create a pool that already exists.
 		DuplicatePoolError,
-		/// Assets in the pool must be distinct
+		/// Assets in the pool must be distinct.
 		DistinctAssetsRequired,
-		/// Trying to do an operation on a pool that does not exists. Create pool first
+		/// Trying to do an operation on a pool that does not exists. Create pool first.
 		PoolNotFoundError,
-		/// The number provided in the arithmetics overflow the type bound. Use lower number
-		ArithmeticsOverflow
+		/// The number provided in the arithmetics overflow the type bound. Use lower number.
+		ArithmeticsOverflow,
+		/// Provided amounts for liquidity are insufficient.
+		InsufficientLiquidityProvided,
+		/// An error occurred while trying to derive the pool account
+		PoolAccountError
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -142,7 +160,7 @@ pub mod pallet {
 		}
 
 		pub fn pool_exists(pool_id: &PoolCompositeIdOf<T>) -> bool {
-			Self::get_pool_by_id(pool_id).is_some()
+			Pools::<T>::contains_key(pool_id)
 		}
 
 		pub fn create_liquidity_token_id_for_pair(
@@ -158,44 +176,61 @@ pub mod pallet {
 			Hashable::blake2_256(&Encode::encode(pool_id))
 		}
 
-		pub fn ensure_distinct_assets(asset_a: &AssetIdOf<T>, asset_b: &AssetIdOf<T>) -> Result<(), DispatchError> {
+		pub fn derive_pool_account_from_id(pool_id: &PoolCompositeIdOf<T>) -> Result<T::AccountId, &'static str> {
+			let seed = blake2_256(&pool_id.encode());
+			T::AccountId::decode(&mut &seed[..])
+				.map_err(|_| "Failed to decode AccountId from seed")
+		}
+
+		pub fn ensure_distinct_assets(
+			asset_a: &AssetIdOf<T>,
+			asset_b: &AssetIdOf<T>,
+		) -> Result<(), DispatchError> {
 			ensure!(asset_a != asset_b, Error::<T>::DistinctAssetsRequired);
 			Ok(())
 		}
 
-		pub fn calculate_lp_token_amount_for_pair_amounts(amount_a: AssetBalanceOf<T>, amount_b: AssetBalanceOf<T>) -> Result<AssetBalanceOf<T>, DispatchError> {
-			Ok(amount_a.checked_mul(&amount_b)
+		pub fn calculate_lp_token_amount_for_pair_amounts(
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> Result<AssetBalanceOf<T>, DispatchError> {
+			Ok(amount_a
+				.checked_mul(&amount_b)
 				.ok_or(Error::<T>::ArithmeticsOverflow)?
 				.integer_sqrt())
 		}
 
-		pub fn create_pool(origin: OriginFor<T>, asset_id_a: AssetIdOf<T>, asset_id_b: AssetIdOf<T>, ) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
-			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
-			ensure!(!Self::pool_exists(&pool_id), Error::<T>::DuplicatePoolError);
+		pub fn provide_liquidity_to_pool(
+			pool_id: PoolCompositeIdOf<T>,
+			pool: LiquidityPool<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			ensure!(
+				amount_a > Zero::zero() && amount_b > Zero::zero(),
+				Error::<T>::InsufficientLiquidityProvided
+			);
+			todo!()
+		}
 
-			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
-			let zero_balance: BalanceOf<T> = Default::default();
-			let pool = LiquidityPool {
-				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
-				balances: (zero_balance, zero_balance),
-				liquidity_token_id,
-			};
-
-			Pools::<T>::insert(pool_id.clone(), pool);
-
-			Self::deposit_event(Event::PoolCreated {
-				pool_id,
-				asset_id_a,
-				asset_id_b,
-				creator: who,
-				liquidity_token_id,
-				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
-			});
-
+		pub fn ensure_amounts_non_zero(
+			amount_a: &AssetBalanceOf<T>,
+			amount_b: &AssetBalanceOf<T>,
+		) -> DispatchResult {
+			ensure!(
+				*amount_a > Zero::zero() && *amount_b > Zero::zero(),
+				Error::<T>::InsufficientLiquidityProvided
+			);
 			Ok(())
 		}
+
+		// pub fn create_pool(
+		// 	origin: OriginFor<T>,
+		// 	asset_id_a: AssetIdOf<T>,
+		// 	asset_id_b: AssetIdOf<T>,
+		// ) -> Result<AssetBalanceOf<T>, DispatchError> {
+		// 	todo!()
+		// }
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -212,7 +247,46 @@ pub mod pallet {
 			amount_a: AssetBalanceOf<T>,
 			amount_b: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			Self::create_pool(origin, asset_id_a, asset_id_b)?;
+			//Self::create_pool(origin, asset_id_a, asset_id_b)?;
+
+			let who = ensure_signed(origin)?;
+			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
+			Self::ensure_amounts_non_zero(&amount_a, &amount_b)?;
+
+			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			ensure!(!Self::pool_exists(&pool_id), Error::<T>::DuplicatePoolError);
+
+			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
+			let lp_token_amount_to_mint: AssetBalanceOf<T> =
+				Self::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b)?;
+			// let zero_balance: BalanceOf<T> = Default::default();
+			let pool = LiquidityPool {
+				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
+				balances: (amount_a, amount_b),
+				liquidity_token_id,
+			};
+
+			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
+
+			Pools::<T>::insert(pool_id.clone(), pool);
+
+			Self::deposit_event(Event::PoolCreated {
+				pool_id,
+				asset_id_a: asset_id_a.clone(),
+				asset_id_b: asset_id_b.clone(),
+				creator: who.clone(),
+				liquidity_token_id,
+				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
+			});
+
+
+			// todo check if sender has enough balance for both tokens
+
+
+			// transfer the tokens from the users accout into pool account
+
+			T::Fungibles::transfer(asset_id_a.clone(), &who.clone(), &pool_account.clone(), amount_a, Preservation::Expendable)?;
+			T::Fungibles::transfer(asset_id_b.clone(), &who, &pool_account, amount_b, Preservation::Expendable)?;
 
 			Ok(())
 		}
@@ -229,11 +303,11 @@ pub mod pallet {
 			let _who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
-			let pool = Self::get_pool_by_id(&pool_id);
-			ensure!(pool.is_some(), Error::<T>::PoolNotFoundError);
+			let pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
+
 			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
-
-
+			let lp_token_amount_to_mint: AssetBalanceOf<T> =
+				Self::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b)?;
 
 			Ok(())
 		}

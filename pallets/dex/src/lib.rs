@@ -5,6 +5,7 @@ use frame_support::traits::fungibles;
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
+use sp_io::hashing::blake2_256;
 
 #[cfg(test)]
 mod mock;
@@ -29,9 +30,11 @@ pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 	<T as frame_system::Config>::AccountId,
 >>::Balance;
 
+pub type PoolCompositeIdOf<T> = (AssetIdOf<T>, AssetIdOf<T>);
+
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetIdOf, BalanceOf, AssetBalanceOf};
+	use crate::{AssetBalanceOf, AssetIdOf, PoolCompositeIdOf};
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{fungible, fungibles},
@@ -40,6 +43,13 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
+
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct AssetPair<T: Config> {
+		pub asset_a: AssetIdOf<T>,
+		pub asset_b: AssetIdOf<T>,
+	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -92,26 +102,58 @@ pub mod pallet {
 		DistinctAssetsRequired,
 	}
 
+	impl<T: Config> Pallet<T> {
+		/// This function takes two asset identifiers and returns them in a consistent order.
+		/// It ensures the smaller (in terms of ordering) asset ID always comes first.
+		/// f(a, b) == f(b, a)
+		pub fn create_pool_id_from_assets(asset_1: AssetIdOf<T>, asset_2: AssetIdOf<T>) -> PoolCompositeIdOf<T> {
+			// Use min and max to ensure the smaller asset ID always comes first.
+			if asset_1.encode() < asset_2.encode() {
+				(asset_1, asset_2)
+			} else {
+				(asset_2, asset_1)
+			}
+		}
+
+		/// Retrieves a pool based on its ID.
+		pub fn get_pool_by_id(pool_id: PoolCompositeIdOf<T>) -> Option<u64> {
+			// Pools::<T>::get(pool_id)
+			// TODO
+			None
+		}
+
+		pub fn pool_exists(pool_id: PoolCompositeIdOf<T>) -> bool {
+			// todo!()
+			false
+		}
+
+	}
+
+
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
 	// These functions materialize as "extrinsics", which are often compared to transactions.
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 
+
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			asset_1: AssetIdOf<T>,
-			asset_2: AssetIdOf<T>,
-			amount_1: AssetBalanceOf<T>,
-			amount_2: AssetBalanceOf<T>,
+			asset_2: AssetIdOf<T>
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+			let _who = ensure_signed(origin)?;
 			ensure!(asset_1 != asset_2, Error::<T>::DistinctAssetsRequired);
-			// Error::<T>::DuplicatePoolError
-
-			Ok(())
+			let pool_id = Self::create_pool_id_from_assets(asset_1, asset_2);
+			//if Self::pool_exists(pool_id) {
+			//	return Error::<T>::DuplicatePoolError;
+			//}
+			match Self::get_pool_by_id(pool_id) {
+				Some(_) => Err(Error::<T>::DuplicatePoolError.into()),
+				_ => Ok(())
+			}
 		}
 
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
@@ -152,6 +194,5 @@ pub mod pallet {
 				},
 			}
 		}
-
 	}
 }

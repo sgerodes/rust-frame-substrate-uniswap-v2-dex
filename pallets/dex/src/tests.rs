@@ -32,16 +32,60 @@ mod tests {
 	use pallet_assets::Error as AssetsError;
 
 	const ALICE_ID: u64 = 1;
+	const BOB_ID: u64 = 2;
 	const ASSET_1_ID: u32 = 1;
 	const ASSET_2_ID: u32 = 2;
-
 
 	#[test]
 	fn fail_create_pool_with_identical_assets() {
 		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
-			assert_noop!(Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_1_ID, 10, 20), Error::<Test>::DistinctAssetsRequired);
+			assert_noop!(
+				Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_1_ID),
+				Error::<Test>::DistinctAssetsRequired
+			);
 		});
 	}
+
+
+	#[test]
+	fn create_pool_id_from_assets_orders_asset_ids_consistently() {
+		// Test that function works regardless of the order of asset IDs
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			assert_eq!(
+				Dex::create_pool_id_from_assets(ASSET_1_ID, ASSET_2_ID),
+				Dex::create_pool_id_from_assets(ASSET_2_ID, ASSET_1_ID),
+				"The pool id function should order asset IDs correctly."
+			);
+
+		});
+	}
+
+	#[test]
+	fn duplicate_pool_creation_should_fail() {
+		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			// First pool creation should succeed
+			assert_ok!(Dex::create_pool(
+                alice_origin.clone(),
+                ASSET_1_ID,
+                ASSET_2_ID
+            ));
+
+			// Second pool creation with the same assets should fail
+			assert_noop!(
+                Dex::create_pool(
+                    alice_origin,
+                    ASSET_1_ID,
+                    ASSET_2_ID
+                ),
+                Error::<Test>::DuplicatePoolError
+            );
+		});
+	}
+
 }

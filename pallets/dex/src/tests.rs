@@ -2,7 +2,7 @@ use crate::{mock::*, Error, Event};
 use frame_support::{assert_noop, assert_ok};
 
 #[cfg(test)]
-mod pool_creation_tests {
+mod dex_tests {
 	use super::*;
 	use crate::{mock::*, Error};
 	use frame_support::{assert_noop, assert_ok};
@@ -129,4 +129,25 @@ mod pool_creation_tests {
 			assert!(found, "Failed to find PoolCreated event");
 		});
 	}
+
+
+	#[test]
+	fn calculate_lp_token_amount_for_pair_amounts_overflow() {
+		assert!(Dex::calculate_lp_token_amount_for_pair_amounts(u128::MAX, 2).is_err());
+	}
+
+	#[test]
+	fn calculate_lp_token_amount_for_pair_amounts_works() {
+		assert_eq!(
+			Dex::calculate_lp_token_amount_for_pair_amounts(100, 200).unwrap(), 141
+		);
+		assert_eq!(
+			Dex::calculate_lp_token_amount_for_pair_amounts(100, 100).unwrap(), 100
+		);
+		assert_eq!(
+			Dex::calculate_lp_token_amount_for_pair_amounts(100, 99).unwrap(), 99
+		);
+	}
+
+
 }

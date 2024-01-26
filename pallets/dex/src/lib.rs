@@ -31,7 +31,7 @@ pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 
 pub type PoolCompositeIdOf<T> = (AssetIdOf<T>, AssetIdOf<T>);
 
-pub type LpAssetId = [u8; 32];
+pub type LpAssetId<T> = AssetIdOf<T>;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -46,8 +46,7 @@ pub mod pallet {
 		Hashable,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot, Zero, AccountIdConversion};
-	use sp_core::hashing::blake2_256;
+	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot, Zero, AccountIdConversion, TrailingZeroInput};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -64,7 +63,7 @@ pub mod pallet {
 	pub struct LiquidityPool<T: Config> {
 		asset_ids: (AssetIdOf<T>, AssetIdOf<T>),
 		balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
-		liquidity_token_id: LpAssetId,
+		liquidity_token_id: LpAssetId<T>,
 	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -108,13 +107,13 @@ pub mod pallet {
 			asset_id_a: AssetIdOf<T>,
 			asset_id_b: AssetIdOf<T>,
 			creator: T::AccountId,
-			liquidity_token_id: LpAssetId,
+			liquidity_token_id: LpAssetId<T>,
 			// block_number: T::BlockNumber,
 			// initial_balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
 		},
 		LiquiditySupplied {
 			pool_id: PoolCompositeIdOf<T>,
-			liquidity_token_id: LpAssetId,
+			liquidity_token_id: LpAssetId<T>,
 			asset_id_a: AssetIdOf<T>,
 			asset_id_b: AssetIdOf<T>,
 			amount_a: AssetBalanceOf<T>,
@@ -166,18 +165,20 @@ pub mod pallet {
 		pub fn create_liquidity_token_id_for_pair(
 			asset_1: AssetIdOf<T>,
 			asset_2: AssetIdOf<T>,
-		) -> LpAssetId {
+		) -> LpAssetId<T> {
 			Self::create_liquidity_token_id_for_pool_id(&Self::create_pool_id_from_assets(
 				asset_1, asset_2,
 			))
 		}
 
-		pub fn create_liquidity_token_id_for_pool_id(pool_id: &PoolCompositeIdOf<T>) -> LpAssetId {
-			Hashable::blake2_256(&Encode::encode(pool_id))
+		pub fn create_liquidity_token_id_for_pool_id(pool_id: &PoolCompositeIdOf<T>) -> LpAssetId<T> {
+			let blake = Hashable::blake2_256(&Encode::encode(pool_id));
+			Decode::decode(&mut TrailingZeroInput::new(blake.as_ref()))
+				.expect("Failed to decode lp token id")
 		}
 
 		pub fn derive_pool_account_from_id(pool_id: &PoolCompositeIdOf<T>) -> Result<T::AccountId, &'static str> {
-			let seed = blake2_256(&pool_id.encode());
+			let seed = Hashable::blake2_256(&pool_id.encode());
 			T::AccountId::decode(&mut &seed[..])
 				.map_err(|_| "Failed to decode AccountId from seed")
 		}
@@ -263,7 +264,7 @@ pub mod pallet {
 			let pool = LiquidityPool {
 				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
 				balances: (amount_a, amount_b),
-				liquidity_token_id,
+				liquidity_token_id: liquidity_token_id.clone(),
 			};
 
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
@@ -275,7 +276,7 @@ pub mod pallet {
 				asset_id_a: asset_id_a.clone(),
 				asset_id_b: asset_id_b.clone(),
 				creator: who.clone(),
-				liquidity_token_id,
+				liquidity_token_id: liquidity_token_id.clone(),
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
@@ -283,10 +284,12 @@ pub mod pallet {
 			// todo check if sender has enough balance for both tokens
 
 
-			// transfer the tokens from the users accout into pool account
+
+			// transfer the tokens from the users account into pool account
 
 			T::Fungibles::transfer(asset_id_a.clone(), &who.clone(), &pool_account.clone(), amount_a, Preservation::Expendable)?;
 			T::Fungibles::transfer(asset_id_b.clone(), &who, &pool_account, amount_b, Preservation::Expendable)?;
+			T::Fungibles::mint_into(liquidity_token_id.clone(), &who, lp_token_amount_to_mint.clone())?;
 
 			Ok(())
 		}

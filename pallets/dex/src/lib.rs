@@ -31,12 +31,15 @@ pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 
 pub type PoolCompositeIdOf<T> = (AssetIdOf<T>, AssetIdOf<T>);
 
+pub type LpAssetId = [u8; 32];
+
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetIdOf, PoolCompositeIdOf};
+	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{fungible, fungibles},
+		Hashable,
 	};
 	use frame_system::pallet_prelude::*;
 
@@ -50,8 +53,13 @@ pub mod pallet {
 		pub asset_b: AssetIdOf<T>,
 	}
 
-	#[pallet::storage]
-	pub type Pools<T> = StorageMap<_, Blake2_128Concat, PoolCompositeIdOf<T>, bool>;
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct LiquidityPool<T: Config> {
+		asset_ids: (AssetIdOf<T>, AssetIdOf<T>),
+		balances: (BalanceOf<T>, BalanceOf<T>),
+		liquidity_token_id: LpAssetId,
+	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -81,19 +89,20 @@ pub mod pallet {
 	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
 	pub type Something<T> = StorageValue<_, u32>;
 
+	#[pallet::storage]
+	pub type Pools<T> = StorageMap<_, Blake2_128Concat, PoolCompositeIdOf<T>, LiquidityPool<T>>;
+
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored { something: u32, who: T::AccountId },
 		PoolCreated {
 			pool_id: PoolCompositeIdOf<T>,
 			asset_id_a: AssetIdOf<T>,
 			asset_id_b: AssetIdOf<T>,
 			creator: T::AccountId,
+			liquidity_token_id: LpAssetId,
 			// block_number: T::BlockNumber,
 			// initial_balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
 		},
@@ -110,6 +119,8 @@ pub mod pallet {
 		DuplicatePoolError,
 		/// Assets in the pool must be distinct
 		DistinctAssetsRequired,
+		/// Trying to do an operation on a pool that does not exists. Create pool first
+		PoolNotFoundError,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -127,12 +138,30 @@ pub mod pallet {
 		}
 
 		/// Retrieves a pool based on its ID.
-		pub fn get_pool_by_id(pool_id: &PoolCompositeIdOf<T>) -> Option<bool> {
+		pub fn get_pool_by_id(pool_id: &PoolCompositeIdOf<T>) -> Option<LiquidityPool<T>> {
 			Pools::<T>::get(pool_id)
 		}
 
 		pub fn pool_exists(pool_id: &PoolCompositeIdOf<T>) -> bool {
 			Self::get_pool_by_id(pool_id).is_some()
+		}
+
+		pub fn create_liquidity_token_id_for_pair(
+			asset_1: AssetIdOf<T>,
+			asset_2: AssetIdOf<T>,
+		) -> LpAssetId {
+			Self::create_liquidity_token_id_for_pool_id(&Self::create_pool_id_from_assets(
+				asset_1, asset_2,
+			))
+		}
+
+		pub fn create_liquidity_token_id_for_pool_id(pool_id: &PoolCompositeIdOf<T>) -> LpAssetId {
+			Hashable::blake2_256(&Encode::encode(pool_id))
+		}
+
+		pub fn ensure_distinct_assets(asset_a: &AssetIdOf<T>, asset_b: &AssetIdOf<T>) -> Result<(), DispatchError> {
+			ensure!(asset_a != asset_b, Error::<T>::DistinctAssetsRequired);
+			Ok(())
 		}
 	}
 
@@ -149,64 +178,50 @@ pub mod pallet {
 			asset_id_b: AssetIdOf<T>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			// ensure the pool is created with distinct assets
-			ensure!(asset_id_a != asset_id_b, Error::<T>::DistinctAssetsRequired);
-
+			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			ensure!(!Self::pool_exists(&pool_id), Error::<T>::DuplicatePoolError);
 
-			// ensure the pool does not exist already
-			ensure!(Self::get_pool_by_id(&pool_id).is_none(), Error::<T>::DuplicatePoolError);
+			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
+			let zero_balance: BalanceOf<T> = Default::default();
+			let pool = LiquidityPool {
+				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
+				balances: (zero_balance, zero_balance),
+				liquidity_token_id,
+			};
 
-			Pools::<T>::insert(pool_id.clone(), true);
+			Pools::<T>::insert(pool_id.clone(), pool);
 
 			Self::deposit_event(Event::PoolCreated {
 				pool_id,
 				asset_id_a,
 				asset_id_b,
 				creator: who,
+				liquidity_token_id,
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
 			Ok(())
 		}
 
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::call_index(100)]
+		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::default())]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
+		pub fn add_liquidity(
+			origin: OriginFor<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
+			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
+			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool = Self::get_pool_by_id(&pool_id);
+			ensure!(pool.is_some(), Error::<T>::PoolNotFoundError);
 
-			// Update storage.
-			<Something<T>>::put(something);
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
-			// Return a successful DispatchResultWithPostInfo
+
 			Ok(())
-		}
-
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::call_index(101)]
-		#[pallet::weight(Weight::default())]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
 		}
 	}
 }

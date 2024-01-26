@@ -5,7 +5,6 @@ use frame_support::traits::fungibles;
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
-use sp_io::hashing::blake2_256;
 
 #[cfg(test)]
 mod mock;
@@ -106,7 +105,10 @@ pub mod pallet {
 		/// This function takes two asset identifiers and returns them in a consistent order.
 		/// It ensures the smaller (in terms of ordering) asset ID always comes first.
 		/// f(a, b) == f(b, a)
-		pub fn create_pool_id_from_assets(asset_1: AssetIdOf<T>, asset_2: AssetIdOf<T>) -> PoolCompositeIdOf<T> {
+		pub fn create_pool_id_from_assets(
+			asset_1: AssetIdOf<T>,
+			asset_2: AssetIdOf<T>,
+		) -> PoolCompositeIdOf<T> {
 			// Use min and max to ensure the smaller asset ID always comes first.
 			if asset_1.encode() < asset_2.encode() {
 				(asset_1, asset_2)
@@ -126,23 +128,19 @@ pub mod pallet {
 			// todo!()
 			false
 		}
-
 	}
-
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
 	// These functions materialize as "extrinsics", which are often compared to transactions.
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-
-
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			asset_1: AssetIdOf<T>,
-			asset_2: AssetIdOf<T>
+			asset_2: AssetIdOf<T>,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 			ensure!(asset_1 != asset_2, Error::<T>::DistinctAssetsRequired);
@@ -152,7 +150,7 @@ pub mod pallet {
 			//}
 			match Self::get_pool_by_id(pool_id) {
 				Some(_) => Err(Error::<T>::DuplicatePoolError.into()),
-				_ => Ok(())
+				_ => Ok(()),
 			}
 		}
 

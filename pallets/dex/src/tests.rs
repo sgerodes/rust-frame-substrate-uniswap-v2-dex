@@ -48,7 +48,6 @@ mod tests {
 		});
 	}
 
-
 	#[test]
 	fn create_pool_id_from_assets_orders_asset_ids_consistently() {
 		// Test that function works regardless of the order of asset IDs
@@ -59,7 +58,6 @@ mod tests {
 				Dex::create_pool_id_from_assets(ASSET_2_ID, ASSET_1_ID),
 				"The pool id function should order asset IDs correctly."
 			);
-
 		});
 	}
 
@@ -70,22 +68,13 @@ mod tests {
 			System::set_block_number(1);
 
 			// First pool creation should succeed
-			assert_ok!(Dex::create_pool(
-                alice_origin.clone(),
-                ASSET_1_ID,
-                ASSET_2_ID
-            ));
+			assert_ok!(Dex::create_pool(alice_origin.clone(), ASSET_1_ID, ASSET_2_ID));
 
 			// Second pool creation with the same assets should fail
 			assert_noop!(
-                Dex::create_pool(
-                    alice_origin,
-                    ASSET_1_ID,
-                    ASSET_2_ID
-                ),
-                Error::<Test>::DuplicatePoolError
-            );
+				Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_2_ID),
+				Error::<Test>::DuplicatePoolError
+			);
 		});
 	}
-
 }

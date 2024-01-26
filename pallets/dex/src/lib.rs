@@ -50,6 +50,9 @@ pub mod pallet {
 		pub asset_b: AssetIdOf<T>,
 	}
 
+	#[pallet::storage]
+	pub type Pools<T> = StorageMap<_, Blake2_128Concat, PoolCompositeIdOf<T>, bool>;
+
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -103,13 +106,11 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		/// This function takes two asset identifiers and returns them in a consistent order.
-		/// It ensures the smaller (in terms of ordering) asset ID always comes first.
-		/// f(a, b) == f(b, a)
+		/// ensures commutativity:  f(a, b) == f(b, a)
 		pub fn create_pool_id_from_assets(
 			asset_1: AssetIdOf<T>,
 			asset_2: AssetIdOf<T>,
 		) -> PoolCompositeIdOf<T> {
-			// Use min and max to ensure the smaller asset ID always comes first.
 			if asset_1.encode() < asset_2.encode() {
 				(asset_1, asset_2)
 			} else {
@@ -118,15 +119,12 @@ pub mod pallet {
 		}
 
 		/// Retrieves a pool based on its ID.
-		pub fn get_pool_by_id(pool_id: PoolCompositeIdOf<T>) -> Option<u64> {
-			// Pools::<T>::get(pool_id)
-			// TODO
-			None
+		pub fn get_pool_by_id(pool_id: &PoolCompositeIdOf<T>) -> Option<bool> {
+			Pools::<T>::get(pool_id)
 		}
 
-		pub fn pool_exists(pool_id: PoolCompositeIdOf<T>) -> bool {
-			// todo!()
-			false
+		pub fn pool_exists(pool_id: &PoolCompositeIdOf<T>) -> bool {
+			Self::get_pool_by_id(pool_id).is_some()
 		}
 	}
 
@@ -143,15 +141,17 @@ pub mod pallet {
 			asset_2: AssetIdOf<T>,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
+			// ensure the pool is created with distinct assets
 			ensure!(asset_1 != asset_2, Error::<T>::DistinctAssetsRequired);
+
 			let pool_id = Self::create_pool_id_from_assets(asset_1, asset_2);
-			//if Self::pool_exists(pool_id) {
-			//	return Error::<T>::DuplicatePoolError;
-			//}
-			match Self::get_pool_by_id(pool_id) {
-				Some(_) => Err(Error::<T>::DuplicatePoolError.into()),
-				_ => Ok(()),
-			}
+
+			// ensure the pool does not exist already
+			ensure!(Self::get_pool_by_id(&pool_id).is_none(), Error::<T>::DuplicatePoolError);
+
+			Pools::<T>::insert(pool_id, true);
+
+			Ok(())
 		}
 
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to

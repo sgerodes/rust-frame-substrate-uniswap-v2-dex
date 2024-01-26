@@ -63,16 +63,16 @@ mod tests {
 
 	#[test]
 	fn duplicate_pool_creation_should_fail() {
-		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 
 			// First pool creation should succeed
-			assert_ok!(Dex::create_pool(alice_origin.clone(), ASSET_1_ID, ASSET_2_ID));
+			assert_ok!(Dex::create_pool(bob_origin.clone(), ASSET_1_ID, ASSET_2_ID));
 
 			// Second pool creation with the same assets should fail
 			assert_noop!(
-				Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_2_ID),
+				Dex::create_pool(bob_origin, ASSET_1_ID, ASSET_2_ID),
 				Error::<Test>::DuplicatePoolError
 			);
 		});

@@ -24,17 +24,15 @@ fn correct_error_for_none_value() {
 }
 
 #[cfg(test)]
-mod tests {
+mod pool_creation_tests {
 	use super::*;
 	use crate::{mock::*, Error};
-	use frame_support::{assert_noop, assert_ok, dispatch::DispatchError};
-	use frame_system::Origin;
-	use pallet_assets::Error as AssetsError;
+	use frame_support::{assert_noop, assert_ok};
 
 	const ALICE_ID: u64 = 1;
 	const BOB_ID: u64 = 2;
-	const ASSET_1_ID: u32 = 1;
-	const ASSET_2_ID: u32 = 2;
+	const ASSET_ID_A: u32 = 1;
+	const ASSET_ID_B: u32 = 2;
 
 	#[test]
 	fn fail_create_pool_with_identical_assets() {
@@ -42,7 +40,7 @@ mod tests {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			assert_noop!(
-				Dex::create_pool(alice_origin, ASSET_1_ID, ASSET_1_ID),
+				Dex::create_pool(alice_origin, ASSET_ID_A, ASSET_ID_A),
 				Error::<Test>::DistinctAssetsRequired
 			);
 		});
@@ -54,8 +52,8 @@ mod tests {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			assert_eq!(
-				Dex::create_pool_id_from_assets(ASSET_1_ID, ASSET_2_ID),
-				Dex::create_pool_id_from_assets(ASSET_2_ID, ASSET_1_ID),
+				Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B),
+				Dex::create_pool_id_from_assets(ASSET_ID_B, ASSET_ID_A),
 				"The pool id function should order asset IDs correctly."
 			);
 		});
@@ -68,13 +66,46 @@ mod tests {
 			System::set_block_number(1);
 
 			// First pool creation should succeed
-			assert_ok!(Dex::create_pool(bob_origin.clone(), ASSET_1_ID, ASSET_2_ID));
+			assert_ok!(Dex::create_pool(bob_origin.clone(), ASSET_ID_A, ASSET_ID_B));
 
 			// Second pool creation with the same assets should fail
 			assert_noop!(
-				Dex::create_pool(bob_origin, ASSET_1_ID, ASSET_2_ID),
+				Dex::create_pool(bob_origin, ASSET_ID_A, ASSET_ID_B),
 				Error::<Test>::DuplicatePoolError
 			);
+		});
+	}
+
+	#[test]
+	fn it_works() {
+		let bob_origin = RuntimeOrigin::signed(BOB_ID);
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			assert_ok!(Dex::create_pool(bob_origin.clone(), ASSET_ID_A, ASSET_ID_B));
+			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			// Assert that the correct event was deposited
+			let expected_event = Event::PoolCreated {
+				pool_id,
+				creator: BOB_ID,
+				asset_id_a: ASSET_ID_A,
+				asset_id_b: ASSET_ID_B,
+			};
+			System::assert_last_event(expected_event.into());
+
+
+			// let mut found = false;
+			// for event in System::events() {
+			// 	if let RuntimeEvent::Dex(crate::Event::PoolCreated {
+			// 		asset_id_a, asset_id_b, creator, ..
+			// 	}) = event.event {
+			// 		assert_eq!(asset_id_a, ASSET_ID_A);
+			// 		assert_eq!(asset_id_b, ASSET_ID_B);
+			// 		assert_eq!(creator, BOB_ID);
+			// 		found = true;
+			// 		break;
+			// 	}
+			// }
+			// assert!(found, "Failed to find PoolCreated event");
 		});
 	}
 }

@@ -33,7 +33,7 @@ pub type PoolCompositeIdOf<T> = (AssetIdOf<T>, AssetIdOf<T>);
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetBalanceOf, AssetIdOf, PoolCompositeIdOf};
+	use crate::{AssetIdOf, PoolCompositeIdOf};
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{fungible, fungibles},
@@ -89,6 +89,14 @@ pub mod pallet {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		SomethingStored { something: u32, who: T::AccountId },
+		PoolCreated {
+			pool_id: PoolCompositeIdOf<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			creator: T::AccountId,
+			// block_number: T::BlockNumber,
+			// initial_balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
+		},
 	}
 
 	// Errors inform users that something went wrong.
@@ -137,19 +145,27 @@ pub mod pallet {
 		#[pallet::weight(Weight::default())]
 		pub fn create_pool(
 			origin: OriginFor<T>,
-			asset_1: AssetIdOf<T>,
-			asset_2: AssetIdOf<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
 		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+			let who = ensure_signed(origin)?;
 			// ensure the pool is created with distinct assets
-			ensure!(asset_1 != asset_2, Error::<T>::DistinctAssetsRequired);
+			ensure!(asset_id_a != asset_id_b, Error::<T>::DistinctAssetsRequired);
 
-			let pool_id = Self::create_pool_id_from_assets(asset_1, asset_2);
+			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 
 			// ensure the pool does not exist already
 			ensure!(Self::get_pool_by_id(&pool_id).is_none(), Error::<T>::DuplicatePoolError);
 
-			Pools::<T>::insert(pool_id, true);
+			Pools::<T>::insert(pool_id.clone(), true);
+
+			Self::deposit_event(Event::PoolCreated {
+				pool_id,
+				asset_id_a,
+				asset_id_b,
+				creator: who,
+				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
+			});
 
 			Ok(())
 		}

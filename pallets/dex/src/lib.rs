@@ -140,8 +140,8 @@ pub mod pallet {
 		InsufficientLiquidityProvided,
 		/// An error occurred while trying to derive the pool account
 		PoolAccountError,
-		/// Sender has inssuficient ballance for this action
-		InsufficientBalance,
+		/// Sender has insufficient balance for this action
+		InsufficientAccountBalance,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -222,6 +222,15 @@ pub mod pallet {
 			todo!()
 		}
 
+		pub fn mint_asset(origin: OriginFor<T>,
+						  asset_id: AssetIdOf<T>,
+						  receiver: T::AccountId,
+						  amount: AssetBalanceOf<T>) -> DispatchResult {
+			ensure_root(origin)?;
+			T::Fungibles::mint_into(asset_id, &receiver, amount)?;
+			Ok(())
+		}
+
 		pub fn ensure_amounts_non_zero(
 			amount_a: &AssetBalanceOf<T>,
 			amount_b: &AssetBalanceOf<T>,
@@ -234,12 +243,12 @@ pub mod pallet {
 		}
 
 		pub fn ensure_sufficient_balance(
-			who: T::AccountId,
+			who: &T::AccountId,
 			asset_id: AssetIdOf<T>,
 			amount_a: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			let sender_balance_a = T::Fungibles::balance(asset_id.clone(), &who);
-			ensure!(sender_balance_a >= amount_a, Error::<T>::InsufficientBalance);
+			let sender_balance = T::Fungibles::balance(asset_id, who);
+			ensure!(sender_balance >= amount_a, Error::<T>::InsufficientAccountBalance);
 			Ok(())
 		}
 	}
@@ -263,13 +272,8 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			Self::ensure_amounts_non_zero(&amount_a, &amount_b)?;
-
-			let sender_balance_a = T::Fungibles::balance(asset_id_a.clone(), &who);
-			ensure!(sender_balance_a >= amount_a, Error::<T>::InsufficientBalance);
-
-			let sender_balance_b = T::Fungibles::balance(asset_id_b.clone(), &who);
-			ensure!(sender_balance_b >= amount_b, Error::<T>::InsufficientBalance);
-
+			Self::ensure_sufficient_balance(&who, asset_id_a.clone(), amount_a.clone())?;
+			Self::ensure_sufficient_balance(&who, asset_id_b.clone(), amount_b.clone())?;
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			ensure!(!Self::pool_exists(&pool_id), Error::<T>::DuplicatePoolError);
 

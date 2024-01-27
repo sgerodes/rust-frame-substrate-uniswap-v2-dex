@@ -35,28 +35,21 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::traits::fungibles::Create;
-	use frame_support::traits::fungibles::Inspect;
-	use frame_support::traits::tokens::Fortitude;
-	use frame_support::traits::tokens::Precision;
+	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{
 			fungible,
-			fungibles::{self, Mutate},
-			tokens::Preservation,
+			fungibles::{self, Create, Inspect, Mutate},
+			tokens::{Fortitude, Precision, Preservation},
 		},
 		Hashable, PalletId,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::CheckedAdd;
-	use sp_runtime::traits::CheckedDiv;
-	use sp_runtime::traits::CheckedSub;
 	use sp_runtime::traits::{
-		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
+		AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot,
+		One, TrailingZeroInput, Zero,
 	};
-
-	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);

@@ -1,10 +1,7 @@
 use crate as pallet_dex;
 use frame_support::traits::{AsEnsureOriginWithArg, ConstU128, ConstU16, ConstU32, ConstU64};
+use frame_support::{parameter_types, PalletId};
 use frame_system::{EnsureRoot, EnsureSigned};
-use frame_support::{
-	parameter_types,
-	PalletId,
-};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},

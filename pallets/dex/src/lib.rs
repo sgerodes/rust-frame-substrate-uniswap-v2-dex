@@ -36,8 +36,8 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 #[frame_support::pallet]
 pub mod pallet {
 	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
-	use frame_support::traits::fungibles::Inspect;
 	use frame_support::traits::fungibles::Create;
+	use frame_support::traits::fungibles::Inspect;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{
@@ -45,11 +45,12 @@ pub mod pallet {
 			fungibles::{self, Mutate},
 			tokens::Preservation,
 		},
-		Hashable,
-		PalletId,
+		Hashable, PalletId,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero};
+	use sp_runtime::traits::{
+		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
+	};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -105,10 +106,7 @@ pub mod pallet {
 			// Initialize pallet balance for creating and minting LP Tokens
 			use frame_support::traits::fungible::*;
 			let account_id = T::PalletId::get().into_account_truncating();
-			let _ = T::NativeBalance::mint_into(
-				&account_id,
-				 100_000u32.into(),
-			);
+			let _ = T::NativeBalance::mint_into(&account_id, 100_000u32.into());
 		}
 	}
 
@@ -245,10 +243,12 @@ pub mod pallet {
 			todo!()
 		}
 
-		pub fn mint_asset(origin: OriginFor<T>,
-						  asset_id: AssetIdOf<T>,
-						  receiver: T::AccountId,
-						  amount: AssetBalanceOf<T>) -> DispatchResult {
+		pub fn mint_asset(
+			origin: OriginFor<T>,
+			asset_id: AssetIdOf<T>,
+			receiver: T::AccountId,
+			amount: AssetBalanceOf<T>,
+		) -> DispatchResult {
 			ensure_root(origin)?;
 			T::Fungibles::mint_into(asset_id, &receiver, amount)?;
 			Ok(())
@@ -258,8 +258,10 @@ pub mod pallet {
 			T::PalletId::get().into_account_truncating()
 		}
 
-		pub	fn create_token(asset_id: AssetIdOf<T>) -> DispatchResult {
-			T::Fungibles::create(asset_id.clone(), Self::account_id(), true, One::one())?;
+		pub fn create_token_if_not_exists(asset_id: AssetIdOf<T>) -> DispatchResult {
+			if !T::Fungibles::asset_exists(asset_id.clone()) {
+				T::Fungibles::create(asset_id.clone(), Self::account_id(), true, One::one())?;
+			}
 			Ok(())
 		}
 
@@ -274,13 +276,49 @@ pub mod pallet {
 			Ok(())
 		}
 
+		pub fn get_balance(who: &T::AccountId, asset_id: AssetIdOf<T>) -> AssetBalanceOf<T>{
+			T::Fungibles::balance(asset_id, who)
+		}
+
 		pub fn ensure_sufficient_balance(
 			who: &T::AccountId,
 			asset_id: AssetIdOf<T>,
 			amount_a: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			let sender_balance = T::Fungibles::balance(asset_id, who);
+			let sender_balance = Self::get_balance(who, asset_id);
 			ensure!(sender_balance >= amount_a, Error::<T>::InsufficientAccountBalance);
+			Ok(())
+		}
+
+		pub fn transfer_assets_and_mint_lp_tokens(
+			who: &T::AccountId,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+			pool_account: T::AccountId,
+			liquidity_token_id: LpAssetId<T>,
+			liquidity_token_amount: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			T::Fungibles::transfer(
+				asset_id_a.clone(),
+				&who.clone(),
+				&pool_account.clone(),
+				amount_a,
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::transfer(
+				asset_id_b.clone(),
+				&who,
+				&pool_account,
+				amount_b,
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::mint_into(
+				liquidity_token_id.clone(),
+				&who,
+				liquidity_token_amount.clone(),
+			)?;
 			Ok(())
 		}
 	}
@@ -299,8 +337,6 @@ pub mod pallet {
 			amount_a: AssetBalanceOf<T>,
 			amount_b: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			//Self::create_pool(origin, asset_id_a, asset_id_b)?;
-
 			let who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			Self::ensure_amounts_non_zero(&amount_a, &amount_b)?;
@@ -312,8 +348,7 @@ pub mod pallet {
 			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
 			let lp_token_amount_to_mint: AssetBalanceOf<T> =
 				Self::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b)?;
-			Self::create_token(liquidity_token_id.clone())?;
-			// let zero_balance: BalanceOf<T> = Default::default();
+			Self::create_token_if_not_exists(liquidity_token_id.clone())?;
 			let pool = LiquidityPool {
 				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
 				balances: (amount_a, amount_b),
@@ -333,27 +368,15 @@ pub mod pallet {
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
-
-			// transfer the tokens from the users account into pool account
-
-			T::Fungibles::transfer(
+			Self::transfer_assets_and_mint_lp_tokens(
+				&who,
 				asset_id_a.clone(),
-				&who.clone(),
-				&pool_account.clone(),
-				amount_a,
-				Preservation::Expendable,
-			)?;
-			T::Fungibles::transfer(
 				asset_id_b.clone(),
-				&who,
-				&pool_account,
+				amount_a,
 				amount_b,
-				Preservation::Expendable,
-			)?;
-			T::Fungibles::mint_into(
-				liquidity_token_id.clone(),
-				&who,
-				lp_token_amount_to_mint.clone(),
+				pool_account,
+				liquidity_token_id,
+				lp_token_amount_to_mint,
 			)?;
 
 			Ok(())

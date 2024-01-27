@@ -1,23 +1,20 @@
 use crate::{mock::*, Error, Event};
-use frame_support::{assert_noop, assert_ok};
 use crate::{Config, Pallet};
-use sp_runtime::traits::AccountIdConversion;
 use frame_support::traits::fungibles::Mutate;
+use frame_support::{assert_noop, assert_ok};
+use sp_runtime::traits::AccountIdConversion;
 
 use crate::mock::{new_test_ext, Test};
 
-
 #[cfg(test)]
 mod dex_tests {
-	use codec::Compact;
 	use super::*;
-	use crate::{mock::*, Error};
-	use frame_support::{assert_noop, assert_ok};
 	use crate::mock::{new_test_ext, Test};
+	use crate::{mock::*, Error};
+	use codec::Compact;
 	use frame_support::traits::fungibles::Inspect;
+	use frame_support::{assert_noop, assert_ok};
 
-
-	const ADMIN: u64 = 1;
 	const ALICE_ID: u64 = 2;
 	const BOB_ID: u64 = 3;
 	const ASSET_ID_A: u32 = 1;
@@ -25,16 +22,12 @@ mod dex_tests {
 	const ASSET_ID_C: u32 = 3;
 
 
-	fn create_token(owner: u64, token: u32) {
-		assert_ok!(Assets::force_create(RuntimeOrigin::root(), Compact(token), owner, true, 1));
-	}
-
 	fn mint_token(receiver: u64, token: u32, amount: u128) {
 		assert_ok!(Dex::mint_asset(RuntimeOrigin::root(), token, receiver, amount));
 	}
 
 	fn mint_token_creating(receiver: u64, token: u32, amount: u128) {
-		create_token(receiver, token);
+		let _ = Dex::create_token_if_not_exists(token);
 		mint_token(receiver, token, amount);
 	}
 
@@ -109,6 +102,7 @@ mod dex_tests {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			set_up_bob_with_100_a_b_coins();
+			set_up_alice_with_100_a_b_coins();
 			//let lp_id = Dex::create_liquidity_token_id_for_pair();
 
 			// First pool creation should succeed
@@ -207,18 +201,13 @@ mod dex_tests {
 		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 99).unwrap(), 99);
 	}
 
-
 	#[test]
 	fn ensure_sufficient_balance_fails_for_low_balance() {
 		new_test_ext().execute_with(|| {
 			assert_noop!(
-                Pallet::<Test>::ensure_sufficient_balance(
-                    &ALICE_ID,
-                    ASSET_ID_A,
-                    150,
-                ),
-                Error::<Test>::InsufficientAccountBalance
-            );
+				Pallet::<Test>::ensure_sufficient_balance(&ALICE_ID, ASSET_ID_A, 150,),
+				Error::<Test>::InsufficientAccountBalance
+			);
 		});
 	}
 	#[test]
@@ -226,14 +215,16 @@ mod dex_tests {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
-			assert_noop!(Dex::initialise_pool_with_assets(
-				bob_origin.clone(),
-				ASSET_ID_A,
-				ASSET_ID_B,
-				10,
-				10
-			),
-			Error::<Test>::InsufficientAccountBalance);
+			assert_noop!(
+				Dex::initialise_pool_with_assets(
+					bob_origin.clone(),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					10,
+					10
+				),
+				Error::<Test>::InsufficientAccountBalance
+			);
 		});
 	}
 
@@ -246,7 +237,6 @@ mod dex_tests {
 			let initial_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);
 			assert_eq!(initial_balance, 0, "Initial balance should be zero");
 
-			// Mint tokens
 			set_up_alice_with_100_a_b_coins();
 
 			// Check recipient's new balance
@@ -255,5 +245,40 @@ mod dex_tests {
 		});
 	}
 
+	#[test]
+	fn token_creation_is_idempotent() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+		});
+	}
 
+	#[test]
+	fn lp_tokens_are_correctly_transferred_to_sender() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			let amount_a: u128 = 100;
+			let amount_b: u128 = 100;
+
+			// Initialize pool with assets
+			assert_ok!(Dex::initialise_pool_with_assets(
+                RuntimeOrigin::signed(ALICE_ID),
+                ASSET_ID_A,
+                ASSET_ID_B,
+                amount_a,
+                amount_b
+            ));
+
+			// Calculate expected LP token amount
+			let expected_lp_token_amount = Dex::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b).unwrap();
+
+			// Assert LP token balance for Alice is increased
+			let liquidity_token_id = Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let alice_lp_token_balance = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert_eq!(alice_lp_token_balance, expected_lp_token_amount, "LP token balance should have increased by the calculated amount");
+		});
+	}
 }

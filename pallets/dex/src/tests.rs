@@ -33,27 +33,8 @@ fn set_up_bob_with_100_a_b_coins() {
 }
 
 #[cfg(test)]
-mod dex_tests {
+mod dex_internal_functions_tests {
 	use super::*;
-
-	#[test]
-	fn fail_create_pool_with_identical_assets() {
-		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
-		new_test_ext().execute_with(|| {
-			System::set_block_number(1);
-			assert_noop!(
-				// cloning to create two different objects that equal in value, and not one same object
-				Dex::initialise_pool_with_assets(
-					alice_origin,
-					ASSET_ID_A.clone(),
-					ASSET_ID_A.clone(),
-					10,
-					10
-				),
-				Error::<Test>::DistinctAssetsRequired
-			);
-		});
-	}
 
 	#[test]
 	fn test_pool_id_consistency_regardless_of_asset_order() {
@@ -87,6 +68,80 @@ mod dex_tests {
 				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B),
 				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_B, ASSET_ID_C),
 				"Lp id should be different for different pairs"
+			);
+		});
+	}
+
+	#[test]
+	fn calculate_lp_token_amount_for_pair_amounts_overflow() {
+		assert!(Dex::calculate_lp_token_amount(u128::MAX, 2).is_err());
+	}
+
+	#[test]
+	fn calculate_lp_token_amount_for_pair_amounts_works() {
+		assert_eq!(Dex::calculate_lp_token_amount(100, 200).unwrap(), 141);
+		assert_eq!(Dex::calculate_lp_token_amount(100, 100).unwrap(), 100);
+		assert_eq!(Dex::calculate_lp_token_amount(100, 99).unwrap(), 99);
+	}
+
+	#[test]
+	fn ensure_sufficient_balance_fails_for_low_balance() {
+		new_test_ext().execute_with(|| {
+			assert_noop!(
+				Pallet::<Test>::ensure_sufficient_balance(&ALICE_ID, ASSET_ID_A, 150,),
+				Error::<Test>::InsufficientAccountBalance
+			);
+		});
+	}
+
+	#[test]
+	fn mint_asset_increases_balance() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			// Assure recipient's initial balance is zero
+			let initial_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);
+			assert_eq!(initial_balance, 0, "Initial balance should be zero");
+
+			set_up_alice_with_100_a_b_coins();
+
+			// Check recipient's new balance
+			let new_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);
+			assert_eq!(new_balance, 100, "Balance should be equal to the minted amount");
+		});
+	}
+
+	#[test]
+	fn token_creation_is_idempotent() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
+		});
+	}
+
+}
+
+mod pool_creation_tests {
+	use super::*;
+
+	#[test]
+	fn fail_create_pool_with_identical_assets() {
+		let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			assert_noop!(
+				// cloning to create two different objects that equal in value, and not one same object
+				Dex::initialise_pool_with_assets(
+					alice_origin,
+					ASSET_ID_A.clone(),
+					ASSET_ID_A.clone(),
+					10,
+					10
+				),
+				Error::<Test>::DistinctAssetsRequired
 			);
 		});
 	}
@@ -165,12 +220,12 @@ mod dex_tests {
 			let mut found = false;
 			for event in System::events() {
 				if let RuntimeEvent::Dex(crate::Event::PoolCreated {
-					asset_id_a,
-					asset_id_b,
-					creator,
-					liquidity_token_id,
-					..
-				}) = event.event
+											 asset_id_a,
+											 asset_id_b,
+											 creator,
+											 liquidity_token_id,
+											 ..
+										 }) = event.event
 				{
 					assert_eq!(asset_id_a, ASSET_ID_A);
 					assert_eq!(asset_id_b, ASSET_ID_B);
@@ -184,27 +239,6 @@ mod dex_tests {
 		});
 	}
 
-	#[test]
-	fn calculate_lp_token_amount_for_pair_amounts_overflow() {
-		assert!(Dex::calculate_lp_token_amount(u128::MAX, 2).is_err());
-	}
-
-	#[test]
-	fn calculate_lp_token_amount_for_pair_amounts_works() {
-		assert_eq!(Dex::calculate_lp_token_amount(100, 200).unwrap(), 141);
-		assert_eq!(Dex::calculate_lp_token_amount(100, 100).unwrap(), 100);
-		assert_eq!(Dex::calculate_lp_token_amount(100, 99).unwrap(), 99);
-	}
-
-	#[test]
-	fn ensure_sufficient_balance_fails_for_low_balance() {
-		new_test_ext().execute_with(|| {
-			assert_noop!(
-				Pallet::<Test>::ensure_sufficient_balance(&ALICE_ID, ASSET_ID_A, 150,),
-				Error::<Test>::InsufficientAccountBalance
-			);
-		});
-	}
 	#[test]
 	fn initialise_pool_fails_due_to_insufficient_balance() {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
@@ -220,34 +254,6 @@ mod dex_tests {
 				),
 				Error::<Test>::InsufficientAccountBalance
 			);
-		});
-	}
-
-	#[test]
-	fn mint_asset_increases_balance() {
-		new_test_ext().execute_with(|| {
-			System::set_block_number(1);
-
-			// Assure recipient's initial balance is zero
-			let initial_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);
-			assert_eq!(initial_balance, 0, "Initial balance should be zero");
-
-			set_up_alice_with_100_a_b_coins();
-
-			// Check recipient's new balance
-			let new_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);
-			assert_eq!(new_balance, 100, "Balance should be equal to the minted amount");
-		});
-	}
-
-	#[test]
-	fn token_creation_is_idempotent() {
-		new_test_ext().execute_with(|| {
-			System::set_block_number(1);
-			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
-			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
-			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
-			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
 		});
 	}
 

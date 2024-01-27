@@ -118,3 +118,6 @@ Central to traders looking to exchange assets at prevailing market rates determi
 - Adjustable Fee Structure: The current implementation has a constant fee. Future iterations could introduce a configurable or market-condition-dependent fee structure, adapting to different economic scenarios.
 - Providing mechanisms to mitigate impermanent loss for liquidity providers could attract more users. This could involve compensatory mechanisms or innovative pool designs that reduce the impact of price divergence.
 - Incorporating risk assessment tools, like price oracles or automated auditing systems, could help users make informed decisions and enhance platform security.
+- Liquidity Mining and Yield Farming: Introduce mechanisms for liquidity mining and yield farming to incentivise users to provide liquidity.
+- Slippage Protection Mechanism: Implement an enhanced slippage protection mechanism that provides better estimates and protections against unfavorable price movements during trades.
+- User Interface (UI): create a user friendly UI for the swap.

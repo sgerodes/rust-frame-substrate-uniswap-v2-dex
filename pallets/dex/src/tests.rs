@@ -21,7 +21,6 @@ mod dex_tests {
 	const ASSET_ID_B: u32 = 2;
 	const ASSET_ID_C: u32 = 3;
 
-
 	fn mint_token(receiver: u64, token: u32, amount: u128) {
 		assert_ok!(Dex::mint_asset(RuntimeOrigin::root(), token, receiver, amount));
 	}
@@ -84,13 +83,13 @@ mod dex_tests {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			assert_eq!(
-				Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B),
-				Dex::create_liquidity_token_id_for_pair(ASSET_ID_B, ASSET_ID_A),
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B),
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_B, ASSET_ID_A),
 				"Lp id should be the same for a reverted pair"
 			);
 			assert_ne!(
-				Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B),
-				Dex::create_liquidity_token_id_for_pair(ASSET_ID_B, ASSET_ID_C),
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B),
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_B, ASSET_ID_C),
 				"Lp id should be different for different pairs"
 			);
 		});
@@ -157,7 +156,7 @@ mod dex_tests {
 				10
 			));
 			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
-			let lp_id = Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let lp_id = Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
 			// Assert that the correct event was deposited
 			// let expected_event = Event::PoolCreated {
 			// 	pool_id,
@@ -191,14 +190,14 @@ mod dex_tests {
 
 	#[test]
 	fn calculate_lp_token_amount_for_pair_amounts_overflow() {
-		assert!(Dex::calculate_lp_token_amount_for_pair_amounts(u128::MAX, 2).is_err());
+		assert!(Dex::calculate_lp_token_amount(u128::MAX, 2).is_err());
 	}
 
 	#[test]
 	fn calculate_lp_token_amount_for_pair_amounts_works() {
-		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 200).unwrap(), 141);
-		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 100).unwrap(), 100);
-		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 99).unwrap(), 99);
+		assert_eq!(Dex::calculate_lp_token_amount(100, 200).unwrap(), 141);
+		assert_eq!(Dex::calculate_lp_token_amount(100, 100).unwrap(), 100);
+		assert_eq!(Dex::calculate_lp_token_amount(100, 99).unwrap(), 99);
 	}
 
 	#[test]
@@ -265,20 +264,27 @@ mod dex_tests {
 
 			// Initialize pool with assets
 			assert_ok!(Dex::initialise_pool_with_assets(
-                RuntimeOrigin::signed(ALICE_ID),
-                ASSET_ID_A,
-                ASSET_ID_B,
-                amount_a,
-                amount_b
-            ));
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				amount_a,
+				amount_b
+			));
 
 			// Calculate expected LP token amount
-			let expected_lp_token_amount = Dex::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b).unwrap();
+			let expected_lp_token_amount =
+				Dex::calculate_lp_token_amount(amount_a, amount_b).unwrap();
 
 			// Assert LP token balance for Alice is increased
-			let liquidity_token_id = Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
-			let alice_lp_token_balance = Dex::get_balance(&ALICE_ID, liquidity_token_id);
-			assert_eq!(alice_lp_token_balance, expected_lp_token_amount, "LP token balance should have increased by the calculated amount");
+			let liquidity_token_id =
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			assert_eq!(
+				Dex::get_balance(&ALICE_ID, liquidity_token_id),
+				expected_lp_token_amount,
+				"LP token balance should have increased by the calculated amount"
+			);
+			assert_eq!(Dex::get_balance(&ALICE_ID, ASSET_ID_A), 0);
+			assert_eq!(Dex::get_balance(&ALICE_ID, ASSET_ID_B), 0);
 		});
 	}
 }

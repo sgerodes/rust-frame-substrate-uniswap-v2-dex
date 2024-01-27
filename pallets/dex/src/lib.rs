@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::traits::fungible;
 use frame_support::traits::fungibles;
+
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
@@ -14,8 +16,6 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-
-use frame_support::traits::fungible;
 
 pub type AssetIdOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 	<T as frame_system::Config>::AccountId,
@@ -35,27 +35,28 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
-	use frame_support::traits::fungibles::Create;
-	use frame_support::traits::fungibles::Inspect;
-	use frame_support::traits::tokens::Fortitude;
-	use frame_support::traits::tokens::Precision;
 	use frame_support::{
+		Hashable,
 		pallet_prelude::*,
-		traits::{
+		PalletId, traits::{
 			fungible,
 			fungibles::{self, Mutate},
 			tokens::Preservation,
 		},
-		Hashable, PalletId,
 	};
+	use frame_support::traits::fungibles::Create;
+	use frame_support::traits::fungibles::Inspect;
+	use frame_support::traits::tokens::Fortitude;
+	use frame_support::traits::tokens::Precision;
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::CheckedAdd;
-	use sp_runtime::traits::CheckedDiv;
-	use sp_runtime::traits::CheckedSub;
 	use sp_runtime::traits::{
 		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
 	};
+	use sp_runtime::traits::CheckedAdd;
+	use sp_runtime::traits::CheckedDiv;
+	use sp_runtime::traits::CheckedSub;
+
+	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);

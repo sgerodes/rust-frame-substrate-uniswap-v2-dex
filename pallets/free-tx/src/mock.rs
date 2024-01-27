@@ -1,7 +1,5 @@
-use crate as pallet_dex;
-use frame_support::traits::{AsEnsureOriginWithArg, ConstU128, ConstU16, ConstU32, ConstU64};
-use frame_support::{parameter_types, PalletId};
-use frame_system::{EnsureRoot, EnsureSigned};
+use crate as pallet_voting;
+use frame_support::traits::{ConstU128, ConstU16, ConstU32, ConstU64};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -17,8 +15,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system,
 		Balances: pallet_balances,
-		Assets: pallet_assets,
-		Dex: pallet_dex,
+		Voting: pallet_voting,
 	}
 );
 
@@ -64,38 +61,10 @@ impl pallet_balances::Config for Test {
 	type MaxFreezes = ConstU32<10>;
 }
 
-impl pallet_assets::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type Balance = Balance;
-	type AssetId = u32;
-	type AssetIdParameter = codec::Compact<u32>;
-	type Currency = Balances;
-	type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<Self::AccountId>>;
-	type ForceOrigin = EnsureRoot<Self::AccountId>;
-	type AssetDeposit = ConstU128<100>;
-	type AssetAccountDeposit = ConstU128<1>;
-	type MetadataDepositBase = ConstU128<10>;
-	type MetadataDepositPerByte = ConstU128<1>;
-	type ApprovalDeposit = ConstU128<1>;
-	type StringLimit = ConstU32<50>;
-	type Freezer = ();
-	type Extra = ();
-	type CallbackHandle = ();
-	type WeightInfo = ();
-	type RemoveItemsLimit = ConstU32<1000>;
-	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = ();
-}
-
-parameter_types! {
-	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
-}
-
-impl pallet_dex::Config for Test {
+impl pallet_voting::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
-	type Fungibles = Assets;
-	type PalletId = DexPalletId;
+	type RuntimeCall = RuntimeCall;
 }
 
 // Build genesis storage according to the mock runtime.

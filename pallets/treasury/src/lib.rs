@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::traits::fungible;
+use frame_support::traits::fungibles;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
@@ -15,7 +15,17 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+use frame_support::traits::fungible;
+
+pub type AssetIdOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
+	<T as frame_system::Config>::AccountId,
+>>::AssetId;
+
 pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
+	<T as frame_system::Config>::AccountId,
+>>::Balance;
+
+pub type AssetBalanceOf<T> = <<T as Config>::Fungibles as fungibles::Inspect<
 	<T as frame_system::Config>::AccountId,
 >>::Balance;
 
@@ -23,17 +33,16 @@ pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
 pub mod pallet {
 	use frame_support::{
 		pallet_prelude::*,
-		traits::{fungible, FindAuthor},
+		traits::{fungible, fungibles},
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::Convert;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_aura::Config {
+	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -45,16 +54,11 @@ pub mod pallet {
 			+ fungible::freeze::Inspect<Self::AccountId>
 			+ fungible::freeze::Mutate<Self::AccountId>;
 
-		/// A conversion which takes an authority id, and returns the associated account id.
-		type AuthorityToAccount: Convert<Self::AuthorityId, Self::AccountId>;
+		/// Type to access the Assets Pallet.
+		type Fungibles: fungibles::Inspect<Self::AccountId>
+			+ fungibles::Mutate<Self::AccountId>
+			+ fungibles::Create<Self::AccountId>;
 	}
-
-	// This storage only appears in tests, and is used to control the fake
-	// block author for testing. Whatever this storage is set to, will be
-	// the block author.
-	#[cfg(test)]
-	#[pallet::storage]
-	pub type TestBlockAuthor<T: Config> = StorageValue<_, T::AccountId>;
 
 	// The pallet's runtime storage items.
 	// https://docs.substrate.io/main-docs/build/runtime-storage/
@@ -77,8 +81,10 @@ pub mod pallet {
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Too many authorities for Aura's limits.
-		TooManyAuthorities,
+		/// Error names should be descriptive.
+		NoneValue,
+		/// Errors should have helpful documentation associated with them.
+		StorageOverflow,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -86,23 +92,9 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example of directly updating the authorities for Aura.
-		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::default())]
-		pub fn force_change_authorities(
-			origin: OriginFor<T>,
-			who: T::AuthorityId,
-		) -> DispatchResult {
-			ensure_root(origin)?;
-			let mut authorities = BoundedVec::<T::AuthorityId, T::MaxAuthorities>::default();
-			authorities.try_push(who).map_err(|_| Error::<T>::TooManyAuthorities)?;
-			pallet_aura::Pallet::<T>::change_authorities(authorities);
-			Ok(())
-		}
-
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::call_index(1)]
+		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
 		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
@@ -118,34 +110,25 @@ pub mod pallet {
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
-	}
 
-	impl<T: Config> Pallet<T> {
-		// A function to get you an account id for the current block author.
-		pub fn find_author() -> Option<T::AccountId> {
-			// Here is some really hacky test code which allows you to control the block author
-			// for tests. You can manage this with `set_test_block_author()` provided by this crate.
-			#[cfg(test)]
-			{
-				return TestBlockAuthor::<T>::get();
+		/// An example dispatchable that may throw a custom error.
+		#[pallet::call_index(1)]
+		#[pallet::weight(Weight::default())]
+		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			// Read a value from storage.
+			match <Something<T>>::get() {
+				// Return an error if the value has not been set.
+				None => Err(Error::<T>::NoneValue.into()),
+				Some(old) => {
+					// Increment the value read from storage; will error in the event of overflow.
+					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
+					// Update the value in storage with the incremented result.
+					<Something<T>>::put(new);
+					Ok(())
+				},
 			}
-
-			// On a real blockchain, you get the author from aura.
-			#[cfg(not(test))]
-			{
-				let digest = frame_system::Pallet::<T>::digest();
-				let pre_runtime_digests = digest.logs.iter().filter_map(|d| d.as_pre_runtime());
-				let maybe_authority_id =
-					pallet_aura::AuraAuthorId::<T>::find_author(pre_runtime_digests);
-				maybe_authority_id.map(T::AuthorityToAccount::convert)
-			}
-		}
-
-		// A helper function for tests to set the block author that will be returned
-		// when calling `find_author` in tests.
-		#[cfg(test)]
-		pub fn set_test_author(who: T::AccountId) {
-			TestBlockAuthor::<T>::put(who);
 		}
 	}
 }

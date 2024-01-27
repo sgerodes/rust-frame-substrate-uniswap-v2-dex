@@ -5,7 +5,9 @@ members = [
     "pallets/dex",
     "pallets/voting",
     "pallets/dpos",
-    "pallets/interface",
+    "pallets/multisig",
+    "pallets/treasury",
+    "pallets/free-tx",
     "runtime",
 ]
 [profile.release]

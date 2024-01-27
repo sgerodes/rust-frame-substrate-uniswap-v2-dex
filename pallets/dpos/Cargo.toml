@@ -23,7 +23,6 @@ pallet-aura = { version = "4.0.0-dev", default-features = false, git = "https://
 pallet-timestamp = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 sp-consensus-aura = { version = "0.10.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 sp-runtime = { version = "24.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pba-interface = { path = "../interface", default-features = false }
 
 [dev-dependencies]
 sp-core = { version = "21.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
@@ -43,7 +42,6 @@ std = [
 	"pallet-aura/std",
 	"sp-consensus-aura/std",
 	"sp-runtime/std",
-	"pba-interface/std",
 
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]

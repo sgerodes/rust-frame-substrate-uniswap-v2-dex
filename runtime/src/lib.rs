@@ -28,6 +28,8 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 // A few exports that help ease life for downstream crates.
+use frame_support::pallet_prelude::Get;
+use frame_support::PalletId;
 pub use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{
@@ -307,6 +309,20 @@ impl pallet_voting::Config for Runtime {
 	type BlockNumberToBalance = sp_runtime::traits::ConvertInto;
 }
 
+/// Configure the pallet-multisig in pallets/multisig.
+impl pallet_multisig::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type NativeBalance = Balances;
+	type RuntimeCall = RuntimeCall;
+}
+
+/// Configure the pallet-free-tx in pallets/free-tx.
+impl pallet_free_tx::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type NativeBalance = Balances;
+	type RuntimeCall = RuntimeCall;
+}
+
 pub struct AuthorityToAccount;
 
 impl Convert<AuraId, AccountId> for AuthorityToAccount {
@@ -325,8 +341,20 @@ impl pallet_dpos::Config for Runtime {
 	type NativeBalance = Balances;
 }
 
+parameter_types! {
+	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
+}
+
 /// Configure the pallet-dex in pallets/dex.
 impl pallet_dex::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type NativeBalance = Balances;
+	type Fungibles = Assets;
+	type PalletId = DexPalletId;
+}
+
+/// Configure the pallet-treasury in pallets/treasury.
+impl pallet_treasury::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type Fungibles = Assets;
@@ -346,6 +374,9 @@ construct_runtime!(
 		Dex: pallet_dex,
 		Dpos: pallet_dpos,
 		Voting: pallet_voting,
+		Multisig: pallet_multisig,
+		Treasury: pallet_treasury,
+		FreeTx: pallet_free_tx,
 	}
 );
 

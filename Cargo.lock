@@ -4476,11 +4476,14 @@ dependencies = [
  "pallet-balances",
  "pallet-dex",
  "pallet-dpos",
+ "pallet-free-tx",
  "pallet-grandpa",
+ "pallet-multisig",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-treasury",
  "pallet-voting",
  "parity-scale-codec",
  "scale-info",
@@ -4762,7 +4765,6 @@ dependencies = [
  "pallet-assets",
  "pallet-balances",
  "parity-scale-codec",
- "pba-interface",
  "scale-info",
  "sp-core",
  "sp-io",
@@ -4780,12 +4782,27 @@ dependencies = [
  "pallet-balances",
  "pallet-timestamp",
  "parity-scale-codec",
- "pba-interface",
  "scale-info",
  "sp-consensus-aura",
  "sp-core",
  "sp-io",
  "sp-runtime",
+]
+
+[[package]]
+name = "pallet-free-tx"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -4808,6 +4825,22 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-multisig"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
  "sp-std",
 ]
 
@@ -4910,6 +4943,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-treasury"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-assets",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-voting"
 version = "4.0.0-dev"
 dependencies = [
@@ -4918,7 +4967,6 @@ dependencies = [
  "frame-system",
  "pallet-balances",
  "parity-scale-codec",
- "pba-interface",
  "scale-info",
  "sp-core",
  "sp-io",
@@ -5049,13 +5097,6 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
-
-[[package]]
-name = "pba-interface"
-version = "0.1.0"
-dependencies = [
- "frame-support",
-]
 
 [[package]]
 name = "pbkdf2"

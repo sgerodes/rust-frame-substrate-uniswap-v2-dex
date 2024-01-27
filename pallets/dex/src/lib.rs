@@ -52,7 +52,6 @@ pub mod pallet {
 	};
 	use sp_runtime::Permill;
 
-
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
@@ -580,8 +579,7 @@ pub mod pallet {
 		) -> Result<AssetBalanceOf<T>, DispatchError> {
 			let _who = ensure_signed(origin)?;
 			ensure!(asset_id_a != asset_id_b, Error::<T>::DistinctAssetsRequired);
-			let pool_id =
-				Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool_id = Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			let pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
 			let (amount_a, amount_b) = if pool.asset_a.asset == asset_id_a {
 				(pool.asset_a.amount, pool.asset_b.amount)
@@ -589,9 +587,7 @@ pub mod pallet {
 				(pool.asset_b.amount, pool.asset_a.amount)
 			};
 
-			let price = amount_a
-				.checked_div(&amount_b)
-				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let price = amount_a.checked_div(&amount_b).ok_or(Error::<T>::ArithmeticsOverflow)?;
 
 			Ok(price)
 		}
@@ -894,10 +890,14 @@ pub mod pallet {
 			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
 
 			let fee = T::SwapFeeRate::get().mul_floor(amount_in);
-			let amount_in_after_fee = amount_in.checked_sub(&fee).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let amount_in_after_fee =
+				amount_in.checked_sub(&fee).ok_or(Error::<T>::ArithmeticsOverflow)?;
 
-			let amount_out =
-				Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in_after_fee.clone())?;
+			let amount_out = Self::calculate_swap_amount(
+				&pool,
+				asset_id_in.clone(),
+				amount_in_after_fee.clone(),
+			)?;
 			ensure!(amount_out >= min_amount_out, Error::<T>::SlippageLimitExceeded);
 
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
@@ -934,6 +934,5 @@ pub mod pallet {
 
 			Ok(())
 		}
-
 	}
 }

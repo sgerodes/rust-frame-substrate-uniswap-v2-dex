@@ -695,7 +695,6 @@ mod tests {
 	}
 }
 
-
 #[cfg(test)]
 mod price_oracle_tests {
 	use super::*;
@@ -705,11 +704,7 @@ mod price_oracle_tests {
 		new_test_ext().execute_with(|| {
 			set_up_alice_with_100_a_b_coins();
 			alice_initializes_pool_a_b_with_50();
-			let price = Dex::get_price(
-				RuntimeOrigin::signed(ALICE_ID),
-				ASSET_ID_A,
-				ASSET_ID_B,
-			);
+			let price = Dex::get_price(RuntimeOrigin::signed(ALICE_ID), ASSET_ID_A, ASSET_ID_B);
 			assert_eq!(price, Ok(1));
 		});
 	}
@@ -719,11 +714,7 @@ mod price_oracle_tests {
 		new_test_ext().execute_with(|| {
 			set_up_alice_with_100_a_b_coins();
 			alice_initializes_pool_a_with_25_and_b_with_75();
-			let price = Dex::get_price(
-				RuntimeOrigin::signed(ALICE_ID),
-				ASSET_ID_B,
-				ASSET_ID_A,
-			);
+			let price = Dex::get_price(RuntimeOrigin::signed(ALICE_ID), ASSET_ID_B, ASSET_ID_A);
 			assert_eq!(price, Ok(3));
 		});
 	}

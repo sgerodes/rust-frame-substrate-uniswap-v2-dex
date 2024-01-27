@@ -5,8 +5,7 @@ use frame_system::{EnsureRoot, EnsureSigned};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
-	BuildStorage,
-	Permill
+	BuildStorage, Permill,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -92,7 +91,7 @@ parameter_types! {
 	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
 }
 parameter_types! {
-    pub const SwapFeeRate: Permill = Permill::from_parts(3000); // 0.3%
+	pub const SwapFeeRate: Permill = Permill::from_parts(3000); // 0.3%
 }
 
 impl pallet_dex::Config for Test {

@@ -1,6 +1,6 @@
 use crate::mock::{new_test_ext, Test};
+use crate::Pallet;
 use crate::{mock::*, Error};
-use crate::{Pallet};
 use frame_support::{assert_noop, assert_ok};
 
 const ALICE_ID: u64 = 2;
@@ -425,7 +425,6 @@ mod add_liquidity_tests {
 mod remove_liquidity_tests {
 	use super::*;
 
-
 	#[test]
 	fn successful_removal_of_liquidity() {
 		new_test_ext().execute_with(|| {
@@ -613,21 +612,24 @@ mod remove_liquidity_tests {
 			);
 		});
 	}
-
 }
 #[cfg(test)]
 mod tests {
 	use super::*;
 
-
-	fn alice_swaps_assets(asset_id_in: u32, asset_id_out: u32, amount_in: u128, min_amount_out: u128) {
+	fn alice_swaps_assets(
+		asset_id_in: u32,
+		asset_id_out: u32,
+		amount_in: u128,
+		min_amount_out: u128,
+	) {
 		assert_ok!(Dex::swap_assets(
-            RuntimeOrigin::signed(ALICE_ID),
-            asset_id_in,
-            asset_id_out,
-            amount_in,
-            min_amount_out,
-        ));
+			RuntimeOrigin::signed(ALICE_ID),
+			asset_id_in,
+			asset_id_out,
+			amount_in,
+			min_amount_out,
+		));
 	}
 
 	#[test]
@@ -672,8 +674,6 @@ mod tests {
 					"Pool's asset balances should reflect the swap"
 				);
 			}
-
-
 		});
 	}
 
@@ -684,14 +684,12 @@ mod tests {
 			alice_initializes_pool_a_b_with_50();
 
 			assert_ok!(Dex::swap_assets(
-                RuntimeOrigin::signed(ALICE_ID),
-                ASSET_ID_A,
-                ASSET_ID_B,
-                10,
-                1,
-            ));
-
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				10,
+				1,
+			));
 		});
 	}
-
 }

@@ -199,7 +199,7 @@ pub mod pallet {
 		/// The actual slippage exceeds the user-defined slippage limit.
 		SlippageLimitExceeded,
 		/// Invallid swap asset
-		InvalidSwapAsset
+		InvalidSwapAsset,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -474,16 +474,20 @@ pub mod pallet {
 			input_user_amount: AssetBalanceOf<T>, // a
 		) -> Result<AssetBalanceOf<T>, DispatchError> {
 			let k_coefficient = Self::calculate_k_coefficient_for_pool(pool)?;
-			let (asset_in_pool_balance, asset_out_pool_balance) = if pool.asset_a.asset == input_asset_id {
-				(pool.asset_a.amount, pool.asset_b.amount)
-			} else if pool.asset_b.asset == input_asset_id {
-				(pool.asset_b.amount, pool.asset_a.amount)
-			} else {
-				return Err(Error::<T>::InvalidSwapAsset.into());
-			};
-			let s1 = asset_in_pool_balance.checked_add(&input_user_amount).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let (asset_in_pool_balance, asset_out_pool_balance) =
+				if pool.asset_a.asset == input_asset_id {
+					(pool.asset_a.amount, pool.asset_b.amount)
+				} else if pool.asset_b.asset == input_asset_id {
+					(pool.asset_b.amount, pool.asset_a.amount)
+				} else {
+					return Err(Error::<T>::InvalidSwapAsset.into());
+				};
+			let s1 = asset_in_pool_balance
+				.checked_add(&input_user_amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
 			let s2 = k_coefficient.checked_div(&s1).ok_or(Error::<T>::ArithmeticsOverflow)?;
-			let output_amount = asset_out_pool_balance.checked_sub(&s2).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let output_amount =
+				asset_out_pool_balance.checked_sub(&s2).ok_or(Error::<T>::ArithmeticsOverflow)?;
 
 			Ok(output_amount)
 		}
@@ -529,7 +533,9 @@ pub mod pallet {
 
 		/// The coefficient K is important part of the swapping calculations
 		/// A * B = k
-		pub fn calculate_k_coefficient_for_pool(pool: &LiquidityPool<T>) -> Result<AssetBalanceOf<T>, DispatchError> {
+		pub fn calculate_k_coefficient_for_pool(
+			pool: &LiquidityPool<T>,
+		) -> Result<AssetBalanceOf<T>, DispatchError> {
 			pool.get_asset_a_balance()
 				.checked_mul(&pool.get_asset_b_balance())
 				.ok_or(Error::<T>::ArithmeticsOverflow.into())
@@ -751,18 +757,38 @@ pub mod pallet {
 
 			ensure!(asset_id_in != asset_id_out, Error::<T>::DistinctAssetsRequired);
 			ensure!(amount_in > Zero::zero(), Error::<T>::InvalidLiquidityCalculation);
-			let pool_id = Self::derive_pool_id_from_assets(asset_id_in.clone(), asset_id_out.clone());
+			let pool_id =
+				Self::derive_pool_id_from_assets(asset_id_in.clone(), asset_id_out.clone());
 			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
 
-
-			let amount_out = Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in.clone())?;
+			let amount_out =
+				Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in.clone())?;
 			ensure!(amount_out >= min_amount_out, Error::<T>::SlippageLimitExceeded);
 
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
 
-			T::Fungibles::transfer(asset_id_in.clone(), &who, &pool_account, amount_in.clone(), Preservation::Expendable)?;
-			T::Fungibles::transfer(asset_id_out.clone(), &pool_account, &who, amount_out.clone(), Preservation::Expendable)?;
-			Self::update_pool_balances(&mut pool, &pool_id, asset_id_in.clone(), amount_in, asset_id_out, amount_out)?;
+			T::Fungibles::transfer(
+				asset_id_in.clone(),
+				&who,
+				&pool_account,
+				amount_in.clone(),
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::transfer(
+				asset_id_out.clone(),
+				&pool_account,
+				&who,
+				amount_out.clone(),
+				Preservation::Expendable,
+			)?;
+			Self::update_pool_balances(
+				&mut pool,
+				&pool_id,
+				asset_id_in.clone(),
+				amount_in,
+				asset_id_out,
+				amount_out,
+			)?;
 
 			// Self::deposit_event(Event::AssetsSwapped {
 			// 	who,
@@ -774,7 +800,5 @@ pub mod pallet {
 
 			Ok(())
 		}
-
 	}
 }
-

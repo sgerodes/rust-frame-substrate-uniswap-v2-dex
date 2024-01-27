@@ -42,6 +42,8 @@ pub use frame_support::{
 	},
 	StorageValue,
 };
+use frame_support::pallet_prelude::Get;
+use frame_support::PalletId;
 pub use frame_system::Call as SystemCall;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
@@ -339,11 +341,16 @@ impl pallet_dpos::Config for Runtime {
 	type NativeBalance = Balances;
 }
 
+parameter_types! {
+	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
+}
+
 /// Configure the pallet-dex in pallets/dex.
 impl pallet_dex::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type Fungibles = Assets;
+	type PalletId = DexPalletId;
 }
 
 /// Configure the pallet-treasury in pallets/treasury.

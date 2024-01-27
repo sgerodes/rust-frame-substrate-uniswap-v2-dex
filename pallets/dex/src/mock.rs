@@ -10,7 +10,6 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	BuildStorage,
 };
-use frame_support::pallet_prelude::Get;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -90,21 +89,16 @@ impl pallet_assets::Config for Test {
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = ();
 }
+
 parameter_types! {
-	pub const TreasuryPalletId: PalletId = PalletId(*b"pba/trsy");
-}
-pub struct TID2;
-impl Get<PalletId> for TID2 {
-	fn get() -> PalletId {
-		PalletId(*b"pba/trsy")
-	}
+	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
 }
 
 impl pallet_dex::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type Fungibles = Assets;
-	type PalletId = TID2;
+	type PalletId = DexPalletId;
 }
 
 // Build genesis storage according to the mock runtime.

@@ -342,6 +342,9 @@ impl pallet_dpos::Config for Runtime {
 parameter_types! {
 	pub const DexPalletId: PalletId = PalletId(*b"pba/cdex");
 }
+parameter_types! {
+    pub const SwapFeeRate: Permill = Permill::from_parts(3000); // 0.3%
+}
 
 /// Configure the pallet-dex in pallets/dex.
 impl pallet_dex::Config for Runtime {
@@ -349,6 +352,7 @@ impl pallet_dex::Config for Runtime {
 	type NativeBalance = Balances;
 	type Fungibles = Assets;
 	type PalletId = DexPalletId;
+	type SwapFeeRate = SwapFeeRate;
 }
 
 /// Configure the pallet-treasury in pallets/treasury.

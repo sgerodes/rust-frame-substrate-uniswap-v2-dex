@@ -8,6 +8,11 @@ The platform supports key functionalities such as initializing pools with specif
 It employs a constant product formula to ensure liquidity and price stability. 
 Additionally, the project incorporates a variety of error checks and safeguards to ensure smooth and secure operations. 
 
+## Fee calculation
+
+The dex incorporates a fee. Currently the fee logic is very simple. Each swap holds the fee from the input amount 
+
+
 ## Extrinsics Overview
 The DEX pallet's extrinsics are designed to interact with liquidity pools on the blockchain, enabling the creation, management, and usage of these pools. Each extrinsic performs specific roles and has built-in checks to ensure transactions are valid and secure.
 

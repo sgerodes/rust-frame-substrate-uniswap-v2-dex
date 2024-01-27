@@ -50,6 +50,8 @@ pub mod pallet {
 		AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot,
 		One, TrailingZeroInput, Zero,
 	};
+	use sp_runtime::Permill;
+
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -114,6 +116,8 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
+		#[pallet::constant]
+		type SwapFeeRate: Get<Permill>;
 	}
 
 	#[pallet::genesis_config]
@@ -845,8 +849,11 @@ pub mod pallet {
 				Self::derive_pool_id_from_assets(asset_id_in.clone(), asset_id_out.clone());
 			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
 
+			let fee = T::SwapFeeRate::get().mul_floor(amount_in);
+			let amount_in_after_fee = amount_in.checked_sub(&fee).ok_or(Error::<T>::ArithmeticsOverflow)?;
+
 			let amount_out =
-				Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in.clone())?;
+				Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in_after_fee.clone())?;
 			ensure!(amount_out >= min_amount_out, Error::<T>::SlippageLimitExceeded);
 
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;

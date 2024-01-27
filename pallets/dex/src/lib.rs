@@ -35,26 +35,26 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{
-		Hashable,
-		pallet_prelude::*,
-		PalletId, traits::{
-			fungible,
-			fungibles::{self, Mutate},
-			tokens::Preservation,
-		},
-	};
 	use frame_support::traits::fungibles::Create;
 	use frame_support::traits::fungibles::Inspect;
 	use frame_support::traits::tokens::Fortitude;
 	use frame_support::traits::tokens::Precision;
-	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{
-		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
+	use frame_support::{
+		pallet_prelude::*,
+		traits::{
+			fungible,
+			fungibles::{self, Mutate},
+			tokens::Preservation,
+		},
+		Hashable, PalletId,
 	};
+	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::CheckedAdd;
 	use sp_runtime::traits::CheckedDiv;
 	use sp_runtime::traits::CheckedSub;
+	use sp_runtime::traits::{
+		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
+	};
 
 	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
 
@@ -558,7 +558,6 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-
 		/// Initializes a liquidity pool for a pair of assets and mints liquidity tokens to the creator.
 		///
 		/// This function creates a new liquidity pool for a pair of distinct assets and credits the pool creator with liquidity tokens representing their share in the pool. The initial liquidity is defined by the amounts of the two assets provided.
@@ -719,7 +718,6 @@ pub mod pallet {
 
 			Ok(())
 		}
-
 
 		/// Removes liquidity from a specified asset pair's pool and returns the underlying assets to the user.
 		///

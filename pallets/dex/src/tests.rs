@@ -1,8 +1,8 @@
 use frame_support::{assert_noop, assert_ok};
 
-use crate::{Error, mock::*};
 use crate::mock::{new_test_ext, Test};
 use crate::Pallet;
+use crate::{mock::*, Error};
 
 const ALICE_ID: u64 = 2;
 const BOB_ID: u64 = 3;

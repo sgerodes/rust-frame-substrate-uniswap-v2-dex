@@ -26,10 +26,24 @@ fn set_up_alice_with_100_a_b_coins() {
 	mint_token_creating(ALICE_ID, ASSET_ID_A, 100);
 	mint_token_creating(ALICE_ID, ASSET_ID_B, 100);
 }
+fn set_up_alice_with_u128_max_a_b_coins() {
+	mint_token_creating(ALICE_ID, ASSET_ID_A, u128::MAX);
+	mint_token_creating(ALICE_ID, ASSET_ID_B, u128::MAX);
+}
 
 fn set_up_bob_with_100_a_b_coins() {
 	mint_token_creating(BOB_ID, ASSET_ID_A, 100);
 	mint_token_creating(BOB_ID, ASSET_ID_B, 100);
+}
+
+fn alice_initializes_pool_a_b_with_50() {
+	assert_ok!(Dex::initialise_pool_with_assets(
+		RuntimeOrigin::signed(ALICE_ID),
+		ASSET_ID_A,
+		ASSET_ID_B,
+		50,
+		50
+	));
 }
 
 #[cfg(test)]
@@ -121,7 +135,6 @@ mod dex_internal_functions_tests {
 			let _ = Dex::create_token_if_not_exists(ASSET_ID_A);
 		});
 	}
-
 }
 
 mod pool_creation_tests {
@@ -220,12 +233,12 @@ mod pool_creation_tests {
 			let mut found = false;
 			for event in System::events() {
 				if let RuntimeEvent::Dex(crate::Event::PoolCreated {
-											 asset_id_a,
-											 asset_id_b,
-											 creator,
-											 liquidity_token_id,
-											 ..
-										 }) = event.event
+					asset_id_a,
+					asset_id_b,
+					creator,
+					liquidity_token_id,
+					..
+				}) = event.event
 				{
 					assert_eq!(asset_id_a, ASSET_ID_A);
 					assert_eq!(asset_id_b, ASSET_ID_B);
@@ -291,7 +304,7 @@ mod pool_creation_tests {
 	}
 }
 
-mod liquidity_tests {
+mod add_liquidity_tests {
 	use super::*;
 
 	#[test]
@@ -300,14 +313,7 @@ mod liquidity_tests {
 			System::set_block_number(1);
 
 			set_up_alice_with_100_a_b_coins();
-
-			assert_ok!(Dex::initialise_pool_with_assets(
-				RuntimeOrigin::signed(ALICE_ID),
-				ASSET_ID_A,
-				ASSET_ID_B,
-				50,
-				50
-			));
+			alice_initializes_pool_a_b_with_50();
 
 			// Verify that Alice's LP token balance has increased
 			let liquidity_token_id =
@@ -325,7 +331,10 @@ mod liquidity_tests {
 
 			// Verify that Alice's LP token balance has increased
 			let alice_lp_balance_after_add = Dex::get_balance(&ALICE_ID, liquidity_token_id);
-			assert!(alice_lp_balance_after_add > alice_lp_balance_after_init, "Alice should have received LP tokens");
+			assert!(
+				alice_lp_balance_after_add > alice_lp_balance_after_init,
+				"Alice should have received LP tokens"
+			);
 
 			// Verify that the pool's asset balances have increased
 			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
@@ -333,7 +342,184 @@ mod liquidity_tests {
 
 			assert_eq!(pool.get_asset_a_balance(), 75, "Asset A balance should be 75");
 			assert_eq!(pool.get_asset_b_balance(), 75, "Asset B balance should be 75");
+		});
+	}
 
+	#[test]
+	fn create_pool_with_same_assets_fails() {
+		new_test_ext().execute_with(|| {
+			let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+			assert_noop!(
+				Dex::initialise_pool_with_assets(alice_origin, ASSET_ID_A, ASSET_ID_A, 10, 10),
+				Error::<Test>::DistinctAssetsRequired
+			);
+		});
+	}
+
+	#[test]
+	fn add_liquidity_to_nonexistent_pool_fails() {
+		new_test_ext().execute_with(|| {
+			let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+			set_up_alice_with_100_a_b_coins();
+			assert_noop!(
+				Dex::add_liquidity(alice_origin, ASSET_ID_A, ASSET_ID_B, 10, 10),
+				Error::<Test>::PoolNotFoundError
+			);
+		});
+	}
+
+	#[test]
+	fn add_liquidity_with_same_assets_fails() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			assert_noop!(
+				Dex::add_liquidity(RuntimeOrigin::signed(ALICE_ID), ASSET_ID_A, ASSET_ID_A, 10, 10),
+				Error::<Test>::DistinctAssetsRequired
+			);
+		});
+	}
+
+	#[test]
+	fn insufficient_balance_for_adding_liquidity_fails() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			// Assuming ALICE_ID has only 100 of ASSET_ID_A
+			assert_noop!(
+				Dex::add_liquidity(
+					RuntimeOrigin::signed(ALICE_ID),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					150, // More than Alice's balance
+					10
+				),
+				Error::<Test>::InsufficientAccountBalance
+			);
+		});
+	}
+	#[test]
+	fn lp_token_amount_overflow_in_add_liquidity_fails() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_u128_max_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+			// Use extremely large amounts to potentially cause overflow
+			assert_noop!(
+				Dex::add_liquidity(
+					RuntimeOrigin::signed(ALICE_ID),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					u128::MAX - 50,
+					u128::MAX - 50
+				),
+				Error::<Test>::ArithmeticsOverflow
+			);
+		});
+	}
+}
+
+#[cfg(test)]
+mod remove_liquidity_tests {
+	use super::*;
+
+	#[test]
+	fn successful_removal_of_liquidity() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			let liquidity_token_id =
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let alice_lp_balance_before = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			let alice_asset_a_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+
+			assert_ok!(Dex::remove_liquidity(
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				25,
+				5,
+				5,
+			));
+
+			let alice_lp_balance_after = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert!(
+				alice_lp_balance_after < alice_lp_balance_before,
+				"Alice's LP token balance should have decreased"
+			);
+
+			// Verify that Alice's asset balances have increased
+			let alice_asset_a_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+			assert!(
+				alice_asset_a_balance > alice_asset_a_balance_before
+					&& alice_asset_b_balance > alice_asset_b_balance_before,
+				"Alice should have received assets back"
+			);
+		});
+	}
+
+	#[test]
+	fn remove_liquidity_from_nonexistent_pool_fails() {
+		new_test_ext().execute_with(|| {
+			let alice_origin = RuntimeOrigin::signed(ALICE_ID);
+			assert_noop!(
+				Dex::remove_liquidity(alice_origin, ASSET_ID_A, ASSET_ID_B, 10, 5, 5),
+				Error::<Test>::PoolNotFoundError
+			);
+		});
+	}
+
+	#[test]
+	fn insufficient_lp_token_balance_fails() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			// Alice attempts to remove more liquidity than she owns in LP tokens
+			assert_noop!(
+				Dex::remove_liquidity(
+					RuntimeOrigin::signed(ALICE_ID),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					1000,
+					10,
+					10
+				),
+				Error::<Test>::InsufficientLiquidityTokenBalance
+			);
+		});
+	}
+
+	#[test]
+	fn slippage_limit_exceeded_fails() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			assert_noop!(
+				Dex::remove_liquidity(
+					RuntimeOrigin::signed(ALICE_ID),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					25,
+					10000, // Unrealistically high minimum amount of Asset A
+					1,
+				),
+				Error::<Test>::SlippageLimitExceeded
+			);
+			assert_noop!(
+				Dex::remove_liquidity(
+					RuntimeOrigin::signed(ALICE_ID),
+					ASSET_ID_A,
+					ASSET_ID_B,
+					25,
+					1,
+					10000, // Unrealistically high minimum amount of Asset B
+				),
+				Error::<Test>::SlippageLimitExceeded
+			);
 		});
 	}
 }

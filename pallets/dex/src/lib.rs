@@ -38,6 +38,8 @@ pub mod pallet {
 	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::traits::fungibles::Create;
 	use frame_support::traits::fungibles::Inspect;
+	use frame_support::traits::tokens::Fortitude;
+	use frame_support::traits::tokens::Precision;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{
@@ -49,6 +51,8 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::CheckedAdd;
+	use sp_runtime::traits::CheckedDiv;
+	use sp_runtime::traits::CheckedSub;
 	use sp_runtime::traits::{
 		AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero,
 	};
@@ -171,16 +175,20 @@ pub mod pallet {
 		DistinctAssetsRequired,
 		/// Trying to do an operation on a pool that does not exists. Create pool first.
 		PoolNotFoundError,
-		/// The number provided in the arithmetics overflow the type bound. Use lower number.
+		/// The arithmetic operation resulted in an overflow beyond the type's limit. Use a smaller value.
 		ArithmeticsOverflow,
-		/// Provided amounts for liquidity are insufficient.
+		/// The amounts provided for liquidity are below the required threshold for this operation.
 		InsufficientLiquidityProvided,
-		/// An error occurred while trying to derive the pool account
+		/// Failed to derive the pool account due to an internal error.
 		PoolAccountError,
 		/// Sender has insufficient balance for this action
 		InsufficientAccountBalance,
 		/// Liquidity token does not exists in a context where it should
 		LiquidityTokenNotFound,
+		/// Insufficient liquidity token in users account
+		InsufficientLiquidityTokenBalance,
+		/// The actual slippage exceeds the user-defined slippage limit.
+		SlippageLimitExceeded,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -321,7 +329,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		pub fn transfer_assets_and_mint_lp_tokens(
+		pub fn transfer_assets_from_user_and_mint_lp_tokens(
 			who: &T::AccountId,
 			asset_id_a: AssetIdOf<T>,
 			asset_id_b: AssetIdOf<T>,
@@ -350,6 +358,99 @@ pub mod pallet {
 				&who,
 				liquidity_token_amount.clone(),
 			)?;
+			Ok(())
+		}
+
+		pub fn transfer_assets_to_user_and_burn_lp_tokens(
+			who: &T::AccountId,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+			pool_account: T::AccountId,
+			liquidity_token_id: LpAssetId<T>,
+			liquidity_token_amount: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			T::Fungibles::burn_from(
+				liquidity_token_id,
+				&who,
+				liquidity_token_amount,
+				Precision::Exact,
+				Fortitude::Force,
+			)?;
+			T::Fungibles::transfer(
+				asset_id_a.clone(),
+				&pool_account,
+				&who,
+				amount_a,
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::transfer(
+				asset_id_b.clone(),
+				&pool_account,
+				&who,
+				amount_b,
+				Preservation::Expendable,
+			)?;
+			Ok(())
+		}
+		fn calculate_asset_amount(
+			total_pool_asset_amount: AssetBalanceOf<T>,
+			user_lp_amount: AssetBalanceOf<T>,
+			total_lp_supply: AssetBalanceOf<T>,
+		) -> Result<AssetBalanceOf<T>, DispatchError> {
+			// Ensure that total liquidity supply is not zero to avoid division by zero
+			ensure!(total_lp_supply > Zero::zero(), Error::<T>::ArithmeticsOverflow);
+
+			// Calculate the amount of asset corresponding to the fraction
+			let asset_amount = total_pool_asset_amount
+				.checked_mul(&user_lp_amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?
+				.checked_div(&total_lp_supply)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+			Ok(asset_amount)
+		}
+
+		fn increase_pool_assets(
+			pool: &mut LiquidityPool<T>,
+			pool_id: &PoolCompositeIdOf<T>,
+			asset_with_balance_a: AssetWithBalance<T>,
+			asset_with_balance_b: AssetWithBalance<T>,
+		) -> DispatchResult {
+			pool.asset_a.amount = pool
+				.asset_a
+				.amount
+				.checked_add(&asset_with_balance_a.amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			pool.asset_b.amount = pool
+				.asset_b
+				.amount
+				.checked_add(&asset_with_balance_b.amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+			Pools::<T>::insert(pool_id, pool);
+			Ok(())
+		}
+
+		fn decrease_pool_assets(
+			pool: &mut LiquidityPool<T>,
+			pool_id: &PoolCompositeIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			pool.asset_a.amount = pool
+				.asset_a
+				.amount
+				.checked_sub(&amount_a)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			pool.asset_b.amount = pool
+				.asset_b
+				.amount
+				.checked_sub(&amount_b)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+			Pools::<T>::insert(pool_id, pool);
 			Ok(())
 		}
 	}
@@ -406,7 +507,7 @@ pub mod pallet {
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
-			Self::transfer_assets_and_mint_lp_tokens(
+			Self::transfer_assets_from_user_and_mint_lp_tokens(
 				&who,
 				asset_id_a.clone(),
 				asset_id_b.clone(),
@@ -452,7 +553,7 @@ pub mod pallet {
 			let lp_token_amount = Self::calculate_lp_token_amount(amount_a, amount_b)?;
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
 
-			Self::transfer_assets_and_mint_lp_tokens(
+			Self::transfer_assets_from_user_and_mint_lp_tokens(
 				&who,
 				asset_id_a.clone(),
 				asset_id_b.clone(),
@@ -463,19 +564,12 @@ pub mod pallet {
 				lp_token_amount.clone(),
 			)?;
 
-			// Update pool balances
-			pool.asset_a.amount = pool
-				.asset_a
-				.amount
-				.checked_add(&asset_with_balance_a.amount)
-				.ok_or(Error::<T>::ArithmeticsOverflow)?;
-			pool.asset_b.amount = pool
-				.asset_b
-				.amount
-				.checked_add(&asset_with_balance_b.amount)
-				.ok_or(Error::<T>::ArithmeticsOverflow)?;
-
-			Pools::<T>::insert(&pool_id, pool);
+			Self::increase_pool_assets(
+				&mut pool,
+				&pool_id,
+				asset_with_balance_a,
+				asset_with_balance_b,
+			)?;
 
 			// Self::deposit_event(Event::LiquiditySupplied {
 			// 	pool_id,
@@ -485,6 +579,77 @@ pub mod pallet {
 			// 	amount_a,
 			// 	amount_b,
 			// 	liquidity_token_minted: lp_token_amount_to_mint,
+			// });
+
+			Ok(())
+		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight(Weight::default())]
+		pub fn remove_liquidity(
+			origin: OriginFor<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			lp_amount_provided: AssetBalanceOf<T>,
+			min_amount_a: AssetBalanceOf<T>,
+			min_amount_b: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			ensure!(Self::pool_exists(&pool_id), Error::<T>::PoolNotFoundError);
+
+			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
+			let lp_id = pool.liquidity_token_id.clone();
+			ensure!(Self::asset_exists(lp_id.clone()), Error::<T>::LiquidityTokenNotFound);
+
+			let user_lp_balance = Self::get_balance(&who, lp_id.clone());
+			let total_lp_issuance = T::Fungibles::total_issuance(lp_id.clone());
+			ensure!(
+				user_lp_balance >= lp_amount_provided,
+				Error::<T>::InsufficientLiquidityTokenBalance
+			);
+
+			// Calculate the amount of each asset to return to the user
+			// (This should be based on the pool's current state and the amount of LP tokens being burned)
+			let amount_a = Self::calculate_asset_amount(
+				pool.asset_a.amount,
+				lp_amount_provided,
+				total_lp_issuance,
+			)?;
+			let amount_b = Self::calculate_asset_amount(
+				pool.asset_b.amount,
+				lp_amount_provided,
+				total_lp_issuance,
+			)?;
+
+			// Check if the amounts meet the user's expectations to avoid slippage
+			ensure!(
+				amount_a >= min_amount_a && amount_b >= min_amount_b,
+				Error::<T>::SlippageLimitExceeded
+			);
+
+			Self::decrease_pool_assets(&mut pool, &pool_id, amount_a, amount_b)?;
+			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
+
+			Self::transfer_assets_to_user_and_burn_lp_tokens(
+				&who,
+				asset_id_a.clone(),
+				asset_id_b.clone(),
+				amount_a,
+				amount_b,
+				pool_account,
+				lp_id.clone(),
+				lp_amount_provided.clone(),
+			)?;
+
+			// Self::deposit_event(Event::LiquidityRemoved {
+			// 	pool_id,
+			// 	asset_id_a,
+			// 	asset_id_b,
+			// 	amount_a,
+			// 	amount_b,
+			// 	liquidity_token_burned: liquidity_token_amount,
 			// });
 
 			Ok(())

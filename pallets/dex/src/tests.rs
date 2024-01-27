@@ -38,12 +38,12 @@ mod dex_tests {
 		mint_token(receiver, token, amount);
 	}
 
-	fn set_up_alice_with_100_coins() {
+	fn set_up_alice_with_100_a_b_coins() {
 		mint_token_creating(ALICE_ID, ASSET_ID_A, 100);
 		mint_token_creating(ALICE_ID, ASSET_ID_B, 100);
 	}
 
-	fn set_up_bob_with_100_coins() {
+	fn set_up_bob_with_100_a_b_coins() {
 		mint_token_creating(BOB_ID, ASSET_ID_A, 100);
 		mint_token_creating(BOB_ID, ASSET_ID_B, 100);
 	}
@@ -108,6 +108,8 @@ mod dex_tests {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
+			set_up_bob_with_100_a_b_coins();
+			//let lp_id = Dex::create_liquidity_token_id_for_pair();
 
 			// First pool creation should succeed
 			assert_ok!(Dex::initialise_pool_with_assets(
@@ -131,6 +133,8 @@ mod dex_tests {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
+			set_up_bob_with_100_a_b_coins();
+
 			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			assert!(Dex::get_pool_by_id(&pool_id).is_none());
 			assert_ok!(Dex::initialise_pool_with_assets(
@@ -149,6 +153,8 @@ mod dex_tests {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
+			set_up_bob_with_100_a_b_coins();
+
 			assert_ok!(Dex::initialise_pool_with_assets(
 				bob_origin.clone(),
 				ASSET_ID_A,
@@ -241,7 +247,7 @@ mod dex_tests {
 			assert_eq!(initial_balance, 0, "Initial balance should be zero");
 
 			// Mint tokens
-			set_up_alice_with_100_coins();
+			set_up_alice_with_100_a_b_coins();
 
 			// Check recipient's new balance
 			let new_balance = pallet_assets::Pallet::<Test>::balance(ASSET_ID_A, &ALICE_ID);

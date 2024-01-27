@@ -37,6 +37,7 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 pub mod pallet {
 	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::traits::fungibles::Inspect;
+	use frame_support::traits::fungibles::Create;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{
@@ -45,11 +46,10 @@ pub mod pallet {
 			tokens::Preservation,
 		},
 		Hashable,
+		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{
-		AccountIdConversion, CheckedMul, IntegerSquareRoot, TrailingZeroInput, Zero,
-	};
+	use sp_runtime::traits::{AccountIdConversion, CheckedMul, IntegerSquareRoot, One, TrailingZeroInput, Zero};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -87,6 +87,29 @@ pub mod pallet {
 		type Fungibles: fungibles::Inspect<Self::AccountId>
 			+ fungibles::Mutate<Self::AccountId>
 			+ fungibles::Create<Self::AccountId>;
+
+		#[pallet::constant]
+		type PalletId: Get<PalletId>;
+	}
+
+	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
+	pub struct GenesisConfig<T: Config> {
+		#[serde(skip)]
+		_config: core::marker::PhantomData<T>,
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+		fn build(&self) {
+			// Initialize pallet balance for creating and minting LP Tokens
+			use frame_support::traits::fungible::*;
+			let account_id = T::PalletId::get().into_account_truncating();
+			let _ = T::NativeBalance::mint_into(
+				&account_id,
+				 100_000u32.into(),
+			);
+		}
 	}
 
 	// The pallet's runtime storage items.
@@ -231,6 +254,15 @@ pub mod pallet {
 			Ok(())
 		}
 
+		pub fn account_id() -> T::AccountId {
+			T::PalletId::get().into_account_truncating()
+		}
+
+		pub	fn create_token(asset_id: AssetIdOf<T>) -> DispatchResult {
+			T::Fungibles::create(asset_id.clone(), Self::account_id(), true, One::one())?;
+			Ok(())
+		}
+
 		pub fn ensure_amounts_non_zero(
 			amount_a: &AssetBalanceOf<T>,
 			amount_b: &AssetBalanceOf<T>,
@@ -280,6 +312,7 @@ pub mod pallet {
 			let liquidity_token_id = Self::create_liquidity_token_id_for_pool_id(&pool_id);
 			let lp_token_amount_to_mint: AssetBalanceOf<T> =
 				Self::calculate_lp_token_amount_for_pair_amounts(amount_a, amount_b)?;
+			Self::create_token(liquidity_token_id.clone())?;
 			// let zero_balance: BalanceOf<T> = Default::default();
 			let pool = LiquidityPool {
 				asset_ids: (asset_id_a.clone(), asset_id_b.clone()),
@@ -300,7 +333,6 @@ pub mod pallet {
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
-			// todo check if sender has enough balance for both tokens
 
 			// transfer the tokens from the users account into pool account
 

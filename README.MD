@@ -114,7 +114,7 @@ Central to traders looking to exchange assets at prevailing market rates determi
 
 # Future Improvements
 - Handling Large Pools: The current implementation uses a k coefficient in the swap calculations. As the pool size increases, there's a risk of overflowing the maximum value of k, potentially locking the swap functionality. Advanced mathematical logic from Substrate could be utilized to mitigate this issue.
-- Precision in Calculations: Swaps and liquidity calculations use integer division, which may lead to precision loss, particularly with small asset amounts. Incorporating higher-precision mathematics (e.g., using units like DOT & Plank, ETH & WEI) could enhance accuracy.
+- Precision in Calculations: Swaps and liquidity calculations use integer division, which may lead to precision loss, particularly with small asset amounts. Incorporating higher-precision mathematics could enhance accuracy.
 - Adjustable Fee Structure: The current implementation has a constant fee. Future iterations could introduce a configurable or market-condition-dependent fee structure, adapting to different economic scenarios.
 - Providing mechanisms to mitigate impermanent loss for liquidity providers could attract more users. This could involve compensatory mechanisms or innovative pool designs that reduce the impact of price divergence.
 - Incorporating risk assessment tools, like price oracles or automated auditing systems, could help users make informed decisions and enhance platform security.

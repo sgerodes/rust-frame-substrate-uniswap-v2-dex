@@ -36,17 +36,20 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 #[frame_support::pallet]
 pub mod pallet {
 	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
+	use frame_support::traits::fungibles::Inspect;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{
 			fungible,
 			fungibles::{self, Mutate},
-			tokens::{Preservation}
+			tokens::Preservation,
 		},
 		Hashable,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{CheckedMul, IntegerSquareRoot, Zero, AccountIdConversion, TrailingZeroInput};
+	use sp_runtime::traits::{
+		AccountIdConversion, CheckedMul, IntegerSquareRoot, TrailingZeroInput, Zero,
+	};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -136,7 +139,9 @@ pub mod pallet {
 		/// Provided amounts for liquidity are insufficient.
 		InsufficientLiquidityProvided,
 		/// An error occurred while trying to derive the pool account
-		PoolAccountError
+		PoolAccountError,
+		/// Sender has inssuficient ballance for this action
+		InsufficientBalance,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -171,16 +176,19 @@ pub mod pallet {
 			))
 		}
 
-		pub fn create_liquidity_token_id_for_pool_id(pool_id: &PoolCompositeIdOf<T>) -> LpAssetId<T> {
+		pub fn create_liquidity_token_id_for_pool_id(
+			pool_id: &PoolCompositeIdOf<T>,
+		) -> LpAssetId<T> {
 			let blake = Hashable::blake2_256(&Encode::encode(pool_id));
 			Decode::decode(&mut TrailingZeroInput::new(blake.as_ref()))
 				.expect("Failed to decode lp token id")
 		}
 
-		pub fn derive_pool_account_from_id(pool_id: &PoolCompositeIdOf<T>) -> Result<T::AccountId, &'static str> {
+		pub fn derive_pool_account_from_id(
+			pool_id: &PoolCompositeIdOf<T>,
+		) -> Result<T::AccountId, &'static str> {
 			let seed = Hashable::blake2_256(&pool_id.encode());
-			T::AccountId::decode(&mut &seed[..])
-				.map_err(|_| "Failed to decode AccountId from seed")
+			T::AccountId::decode(&mut &seed[..]).map_err(|_| "Failed to decode AccountId from seed")
 		}
 
 		pub fn ensure_distinct_assets(
@@ -225,13 +233,15 @@ pub mod pallet {
 			Ok(())
 		}
 
-		// pub fn create_pool(
-		// 	origin: OriginFor<T>,
-		// 	asset_id_a: AssetIdOf<T>,
-		// 	asset_id_b: AssetIdOf<T>,
-		// ) -> Result<AssetBalanceOf<T>, DispatchError> {
-		// 	todo!()
-		// }
+		pub fn ensure_sufficient_balance(
+			who: T::AccountId,
+			asset_id: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			let sender_balance_a = T::Fungibles::balance(asset_id.clone(), &who);
+			ensure!(sender_balance_a >= amount_a, Error::<T>::InsufficientBalance);
+			Ok(())
+		}
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -253,6 +263,12 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			Self::ensure_distinct_assets(&asset_id_a, &asset_id_b)?;
 			Self::ensure_amounts_non_zero(&amount_a, &amount_b)?;
+
+			let sender_balance_a = T::Fungibles::balance(asset_id_a.clone(), &who);
+			ensure!(sender_balance_a >= amount_a, Error::<T>::InsufficientBalance);
+
+			let sender_balance_b = T::Fungibles::balance(asset_id_b.clone(), &who);
+			ensure!(sender_balance_b >= amount_b, Error::<T>::InsufficientBalance);
 
 			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			ensure!(!Self::pool_exists(&pool_id), Error::<T>::DuplicatePoolError);
@@ -280,16 +296,29 @@ pub mod pallet {
 				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
-
 			// todo check if sender has enough balance for both tokens
-
-
 
 			// transfer the tokens from the users account into pool account
 
-			T::Fungibles::transfer(asset_id_a.clone(), &who.clone(), &pool_account.clone(), amount_a, Preservation::Expendable)?;
-			T::Fungibles::transfer(asset_id_b.clone(), &who, &pool_account, amount_b, Preservation::Expendable)?;
-			T::Fungibles::mint_into(liquidity_token_id.clone(), &who, lp_token_amount_to_mint.clone())?;
+			T::Fungibles::transfer(
+				asset_id_a.clone(),
+				&who.clone(),
+				&pool_account.clone(),
+				amount_a,
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::transfer(
+				asset_id_b.clone(),
+				&who,
+				&pool_account,
+				amount_b,
+				Preservation::Expendable,
+			)?;
+			T::Fungibles::mint_into(
+				liquidity_token_id.clone(),
+				&who,
+				lp_token_amount_to_mint.clone(),
+			)?;
 
 			Ok(())
 		}

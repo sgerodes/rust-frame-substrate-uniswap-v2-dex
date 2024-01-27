@@ -20,7 +20,13 @@ mod dex_tests {
 			System::set_block_number(1);
 			assert_noop!(
 				// cloning to create two different objects that equal in value, and not one same object
-				Dex::initialise_pool_with_assets(alice_origin, ASSET_ID_A.clone(), ASSET_ID_A.clone(), 10, 10),
+				Dex::initialise_pool_with_assets(
+					alice_origin,
+					ASSET_ID_A.clone(),
+					ASSET_ID_A.clone(),
+					10,
+					10
+				),
 				Error::<Test>::DistinctAssetsRequired
 			);
 		});
@@ -69,7 +75,13 @@ mod dex_tests {
 			System::set_block_number(1);
 
 			// First pool creation should succeed
-			assert_ok!(Dex::initialise_pool_with_assets(bob_origin.clone(), ASSET_ID_A, ASSET_ID_B, 10, 10));
+			assert_ok!(Dex::initialise_pool_with_assets(
+				bob_origin.clone(),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				10,
+				10
+			));
 
 			// Second pool creation with the same assets should fail
 			assert_noop!(
@@ -86,7 +98,13 @@ mod dex_tests {
 			System::set_block_number(1);
 			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			assert!(Dex::get_pool_by_id(&pool_id).is_none());
-			assert_ok!(Dex::initialise_pool_with_assets(bob_origin.clone(), ASSET_ID_A, ASSET_ID_B, 10, 10));
+			assert_ok!(Dex::initialise_pool_with_assets(
+				bob_origin.clone(),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				10,
+				10
+			));
 			assert!(Dex::get_pool_by_id(&pool_id).is_some());
 		});
 	}
@@ -96,7 +114,13 @@ mod dex_tests {
 		let bob_origin = RuntimeOrigin::signed(BOB_ID);
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
-			assert_ok!(Dex::initialise_pool_with_assets(bob_origin.clone(), ASSET_ID_A, ASSET_ID_B, 10, 10));
+			assert_ok!(Dex::initialise_pool_with_assets(
+				bob_origin.clone(),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				10,
+				10
+			));
 			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			let lp_id = Dex::create_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
 			// Assert that the correct event was deposited
@@ -130,7 +154,6 @@ mod dex_tests {
 		});
 	}
 
-
 	#[test]
 	fn calculate_lp_token_amount_for_pair_amounts_overflow() {
 		assert!(Dex::calculate_lp_token_amount_for_pair_amounts(u128::MAX, 2).is_err());
@@ -138,16 +161,8 @@ mod dex_tests {
 
 	#[test]
 	fn calculate_lp_token_amount_for_pair_amounts_works() {
-		assert_eq!(
-			Dex::calculate_lp_token_amount_for_pair_amounts(100, 200).unwrap(), 141
-		);
-		assert_eq!(
-			Dex::calculate_lp_token_amount_for_pair_amounts(100, 100).unwrap(), 100
-		);
-		assert_eq!(
-			Dex::calculate_lp_token_amount_for_pair_amounts(100, 99).unwrap(), 99
-		);
+		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 200).unwrap(), 141);
+		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 100).unwrap(), 100);
+		assert_eq!(Dex::calculate_lp_token_amount_for_pair_amounts(100, 99).unwrap(), 99);
 	}
-
-
 }

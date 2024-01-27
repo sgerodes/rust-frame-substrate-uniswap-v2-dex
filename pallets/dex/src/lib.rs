@@ -35,7 +35,7 @@ pub type LpAssetId<T> = AssetIdOf<T>;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{AssetBalanceOf, AssetIdOf, BalanceOf, LpAssetId, PoolCompositeIdOf};
+	use crate::{AssetBalanceOf, AssetIdOf, LpAssetId, PoolCompositeIdOf};
 	use frame_support::traits::fungibles::Create;
 	use frame_support::traits::fungibles::Inspect;
 	use frame_support::traits::tokens::Fortitude;
@@ -89,6 +89,13 @@ pub mod pallet {
 
 		pub fn get_asset_b_balance(&self) -> AssetBalanceOf<T> {
 			self.asset_b.amount
+		}
+		pub fn get_asset_id_a(&self) -> AssetIdOf<T> {
+			self.asset_a.asset.clone()
+		}
+
+		pub fn get_asset_id_b(&self) -> AssetIdOf<T> {
+			self.asset_b.asset.clone()
 		}
 	}
 
@@ -177,6 +184,8 @@ pub mod pallet {
 		PoolNotFoundError,
 		/// The arithmetic operation resulted in an overflow beyond the type's limit. Use a smaller value.
 		ArithmeticsOverflow,
+		/// Calculation of asset amount based on liquidity tokens failed.
+		InvalidLiquidityCalculation,
 		/// The amounts provided for liquidity are below the required threshold for this operation.
 		InsufficientLiquidityProvided,
 		/// Failed to derive the pool account due to an internal error.
@@ -189,6 +198,8 @@ pub mod pallet {
 		InsufficientLiquidityTokenBalance,
 		/// The actual slippage exceeds the user-defined slippage limit.
 		SlippageLimitExceeded,
+		/// Invallid swap asset
+		InvalidSwapAsset
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -199,7 +210,7 @@ pub mod pallet {
 
 		/// This function takes two asset identifiers and returns them in a consistent order.
 		/// ensures commutativity:  f(a, b) == f(b, a)
-		pub fn create_pool_id_from_assets(
+		pub fn derive_pool_id_from_assets(
 			asset_a: AssetIdOf<T>,
 			asset_b: AssetIdOf<T>,
 		) -> PoolCompositeIdOf<T> {
@@ -240,7 +251,7 @@ pub mod pallet {
 			asset_1: AssetIdOf<T>,
 			asset_2: AssetIdOf<T>,
 		) -> LpAssetId<T> {
-			Self::derive_liquidity_token_id_for_pool_id(&Self::create_pool_id_from_assets(
+			Self::derive_liquidity_token_id_for_pool_id(&Self::derive_pool_id_from_assets(
 				asset_1, asset_2,
 			))
 		}
@@ -400,7 +411,7 @@ pub mod pallet {
 			total_lp_supply: AssetBalanceOf<T>,
 		) -> Result<AssetBalanceOf<T>, DispatchError> {
 			// Ensure that total liquidity supply is not zero to avoid division by zero
-			ensure!(total_lp_supply > Zero::zero(), Error::<T>::ArithmeticsOverflow);
+			ensure!(total_lp_supply > Zero::zero(), Error::<T>::InvalidLiquidityCalculation);
 
 			// Calculate the amount of asset corresponding to the fraction
 			let asset_amount = total_pool_asset_amount
@@ -453,6 +464,76 @@ pub mod pallet {
 			Pools::<T>::insert(pool_id, pool);
 			Ok(())
 		}
+
+		/// A * B = k
+		/// (A + a) * (B - b) = k
+		/// b = B - (k / (A + a))
+		fn calculate_swap_amount(
+			pool: &LiquidityPool<T>,
+			input_asset_id: AssetIdOf<T>,
+			input_user_amount: AssetBalanceOf<T>, // a
+		) -> Result<AssetBalanceOf<T>, DispatchError> {
+			let k_coefficient = Self::calculate_k_coefficient_for_pool(pool)?;
+			let (asset_in_pool_balance, asset_out_pool_balance) = if pool.asset_a.asset == input_asset_id {
+				(pool.asset_a.amount, pool.asset_b.amount)
+			} else if pool.asset_b.asset == input_asset_id {
+				(pool.asset_b.amount, pool.asset_a.amount)
+			} else {
+				return Err(Error::<T>::InvalidSwapAsset.into());
+			};
+			let s1 = asset_in_pool_balance.checked_add(&input_user_amount).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let s2 = k_coefficient.checked_div(&s1).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			let output_amount = asset_out_pool_balance.checked_sub(&s2).ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+			Ok(output_amount)
+		}
+
+		fn update_pool_balances(
+			pool: &mut LiquidityPool<T>,
+			pool_id: &PoolCompositeIdOf<T>,
+			input_asset_id: AssetIdOf<T>,
+			input_amount: AssetBalanceOf<T>,
+			output_asset_id: AssetIdOf<T>,
+			output_amount: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			if pool.asset_a.asset == input_asset_id {
+				pool.asset_a.amount = pool
+					.asset_a
+					.amount
+					.checked_sub(&input_amount)
+					.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+				pool.asset_b.amount = pool
+					.asset_b
+					.amount
+					.checked_add(&output_amount)
+					.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			} else {
+				pool.asset_b.amount = pool
+					.asset_b
+					.amount
+					.checked_sub(&input_amount)
+					.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+				pool.asset_a.amount = pool
+					.asset_a
+					.amount
+					.checked_add(&output_amount)
+					.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			}
+
+			Pools::<T>::insert(pool_id, pool);
+
+			Ok(())
+		}
+
+		/// The coefficient K is important part of the swapping calculations
+		/// A * B = k
+		pub fn calculate_k_coefficient_for_pool(pool: &LiquidityPool<T>) -> Result<AssetBalanceOf<T>, DispatchError> {
+			pool.get_asset_a_balance()
+				.checked_mul(&pool.get_asset_b_balance())
+				.ok_or(Error::<T>::ArithmeticsOverflow.into())
+		}
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -474,7 +555,7 @@ pub mod pallet {
 			Self::ensure_amounts_non_zero(&amount_a, &amount_b)?;
 			Self::ensure_sufficient_balance(&who, asset_id_a.clone(), amount_a.clone())?;
 			Self::ensure_sufficient_balance(&who, asset_id_b.clone(), amount_b.clone())?;
-			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool_id = Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			let (asset_with_balance_a, asset_with_balance_b) =
 				Self::create_assets_with_balances_ordered(
 					asset_id_a.clone(),
@@ -536,7 +617,7 @@ pub mod pallet {
 			Self::ensure_sufficient_balance(&who, asset_id_a.clone(), amount_a)?;
 			Self::ensure_sufficient_balance(&who, asset_id_b.clone(), amount_b)?;
 
-			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool_id = Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
 			ensure!(
 				Self::asset_exists(pool.liquidity_token_id.clone()),
@@ -596,7 +677,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			let pool_id = Self::create_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool_id = Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
 			ensure!(Self::pool_exists(&pool_id), Error::<T>::PoolNotFoundError);
 
 			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
@@ -654,5 +735,46 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// A * B = k
+		/// (A + a) * (B - b) = k
+		/// b = B - (k / (A + a))
+		#[pallet::weight(Weight::default())]
+		pub fn swap_assets(
+			origin: OriginFor<T>,
+			asset_id_in: AssetIdOf<T>,
+			asset_id_out: AssetIdOf<T>,
+			amount_in: AssetBalanceOf<T>,
+			min_amount_out: AssetBalanceOf<T>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			ensure!(asset_id_in != asset_id_out, Error::<T>::DistinctAssetsRequired);
+			ensure!(amount_in > Zero::zero(), Error::<T>::InvalidLiquidityCalculation);
+			let pool_id = Self::derive_pool_id_from_assets(asset_id_in.clone(), asset_id_out.clone());
+			let mut pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
+
+
+			let amount_out = Self::calculate_swap_amount(&pool, asset_id_in.clone(), amount_in.clone())?;
+			ensure!(amount_out >= min_amount_out, Error::<T>::SlippageLimitExceeded);
+
+			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
+
+			T::Fungibles::transfer(asset_id_in.clone(), &who, &pool_account, amount_in.clone(), Preservation::Expendable)?;
+			T::Fungibles::transfer(asset_id_out.clone(), &pool_account, &who, amount_out.clone(), Preservation::Expendable)?;
+			Self::update_pool_balances(&mut pool, &pool_id, asset_id_in.clone(), amount_in, asset_id_out, amount_out)?;
+
+			// Self::deposit_event(Event::AssetsSwapped {
+			// 	who,
+			// 	asset_id_in.clone(),
+			// 	asset_id_out.clone(),
+			// 	amount_in,
+			// 	amount_out,
+			// });
+
+			Ok(())
+		}
+
 	}
 }
+

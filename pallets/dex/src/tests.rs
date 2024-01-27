@@ -1,11 +1,7 @@
 use crate::mock::{new_test_ext, Test};
-use crate::{mock::*, Error, Event};
-use crate::{Config, Pallet};
-use codec::Compact;
-use frame_support::traits::fungibles::Inspect;
-use frame_support::traits::fungibles::Mutate;
+use crate::{mock::*, Error};
+use crate::{Pallet};
 use frame_support::{assert_noop, assert_ok};
-use sp_runtime::traits::AccountIdConversion;
 
 const ALICE_ID: u64 = 2;
 const BOB_ID: u64 = 3;
@@ -45,6 +41,15 @@ fn alice_initializes_pool_a_b_with_50() {
 		50
 	));
 }
+fn alice_initializes_pool_a_with_25_and_b_with_75() {
+	assert_ok!(Dex::initialise_pool_with_assets(
+		RuntimeOrigin::signed(ALICE_ID),
+		ASSET_ID_A,
+		ASSET_ID_B,
+		25,
+		75
+	));
+}
 
 #[cfg(test)]
 mod dex_internal_functions_tests {
@@ -56,13 +61,13 @@ mod dex_internal_functions_tests {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			assert_eq!(
-				Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B),
-				Dex::create_pool_id_from_assets(ASSET_ID_B, ASSET_ID_A),
+				Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B),
+				Dex::derive_pool_id_from_assets(ASSET_ID_B, ASSET_ID_A),
 				"The pool id function should order asset IDs correctly."
 			);
 			assert_ne!(
-				Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B),
-				Dex::create_pool_id_from_assets(ASSET_ID_B, ASSET_ID_C),
+				Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B),
+				Dex::derive_pool_id_from_assets(ASSET_ID_B, ASSET_ID_C),
 				"The pool id function return different ids for different pairs"
 			);
 		});
@@ -192,7 +197,7 @@ mod pool_creation_tests {
 			System::set_block_number(1);
 			set_up_bob_with_100_a_b_coins();
 
-			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			assert!(Dex::get_pool_by_id(&pool_id).is_none());
 			assert_ok!(Dex::initialise_pool_with_assets(
 				bob_origin.clone(),
@@ -219,7 +224,7 @@ mod pool_creation_tests {
 				10,
 				10
 			));
-			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let _pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			let lp_id = Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
 			// Assert that the correct event was deposited
 			// let expected_event = Event::PoolCreated {
@@ -337,7 +342,7 @@ mod add_liquidity_tests {
 			);
 
 			// Verify that the pool's asset balances have increased
-			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			let pool = Dex::get_pool_by_id(&pool_id).expect("Pool should exist");
 
 			assert_eq!(pool.get_asset_a_balance(), 75, "Asset A balance should be 75");
@@ -420,6 +425,7 @@ mod add_liquidity_tests {
 mod remove_liquidity_tests {
 	use super::*;
 
+
 	#[test]
 	fn successful_removal_of_liquidity() {
 		new_test_ext().execute_with(|| {
@@ -427,6 +433,92 @@ mod remove_liquidity_tests {
 
 			set_up_alice_with_100_a_b_coins();
 			alice_initializes_pool_a_b_with_50();
+
+			let liquidity_token_id =
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let alice_lp_balance_before = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			let alice_asset_a_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+
+			assert_ok!(Dex::remove_liquidity(
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				25,
+				5,
+				5,
+			));
+
+			let alice_lp_balance_after = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert!(
+				alice_lp_balance_after < alice_lp_balance_before,
+				"Alice's LP token balance should have decreased"
+			);
+
+			// Verify that Alice's asset balances have increased
+			let alice_asset_a_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+			assert!(
+				alice_asset_a_balance > alice_asset_a_balance_before
+					&& alice_asset_b_balance > alice_asset_b_balance_before,
+				"Alice should have received assets back"
+			);
+		});
+	}
+
+	#[test]
+	fn successful_removal_of_all_liquidity() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			let liquidity_token_id =
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let alice_lp_balance_before = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert_eq!(alice_lp_balance_before, 50);
+			let alice_asset_a_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+			assert_eq!(alice_asset_a_balance_before, 50);
+			assert_eq!(alice_asset_b_balance_before, 50);
+
+			assert_ok!(Dex::remove_liquidity(
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				50,
+				5,
+				5,
+			));
+
+			let alice_lp_balance_after = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert!(
+				alice_lp_balance_after < alice_lp_balance_before,
+				"Alice's LP token balance should have decreased"
+			);
+			assert_eq!(alice_lp_balance_after, 0);
+
+			// Verify that Alice's asset balances have increased
+			let alice_asset_a_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+			assert!(
+				alice_asset_a_balance > alice_asset_a_balance_before
+					&& alice_asset_b_balance > alice_asset_b_balance_before,
+				"Alice should have received assets back"
+			);
+			assert_eq!(alice_asset_a_balance, 100);
+			assert_eq!(alice_asset_b_balance, 100);
+		});
+	}
+
+	#[test]
+	fn successful_removal_of_liquidity_3() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_with_25_and_b_with_75();
 
 			let liquidity_token_id =
 				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
@@ -491,7 +583,6 @@ mod remove_liquidity_tests {
 			);
 		});
 	}
-
 	#[test]
 	fn slippage_limit_exceeded_fails() {
 		new_test_ext().execute_with(|| {
@@ -522,4 +613,85 @@ mod remove_liquidity_tests {
 			);
 		});
 	}
+
+}
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+
+	fn alice_swaps_assets(asset_id_in: u32, asset_id_out: u32, amount_in: u128, min_amount_out: u128) {
+		assert_ok!(Dex::swap_assets(
+            RuntimeOrigin::signed(ALICE_ID),
+            asset_id_in,
+            asset_id_out,
+            amount_in,
+            min_amount_out,
+        ));
+	}
+
+	#[test]
+	fn successful_asset_swap() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			let alice_asset_a_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance_before = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+
+			let swap_amount_in = 10;
+			let min_amount_out = 1;
+			alice_swaps_assets(ASSET_ID_A, ASSET_ID_B, swap_amount_in, min_amount_out);
+
+			let alice_asset_a_balance_after = Dex::get_balance(&ALICE_ID, ASSET_ID_A);
+			let alice_asset_b_balance_after = Dex::get_balance(&ALICE_ID, ASSET_ID_B);
+			assert!(
+				alice_asset_a_balance_after < alice_asset_a_balance_before,
+				"Alice's Asset A balance should have decreased"
+			);
+			assert!(
+				alice_asset_b_balance_after > alice_asset_b_balance_before,
+				"Alice's Asset B balance should have increased"
+			);
+
+			let pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let pool = Dex::get_pool_by_id(&pool_id).expect("Pool should exist");
+
+			if pool.get_asset_id_a() == ASSET_ID_A {
+				assert_eq!(pool.get_asset_a_balance(), 40);
+				assert!(
+					pool.get_asset_a_balance() < 50 && pool.get_asset_b_balance() > 50,
+					"Pool's asset balances should reflect the swap"
+				);
+			} else {
+				assert_eq!(pool.get_asset_a_balance(), 60);
+				assert!(
+					pool.get_asset_a_balance() > 50 && pool.get_asset_b_balance() < 50,
+					"Pool's asset balances should reflect the swap"
+				);
+			}
+
+
+		});
+	}
+
+	#[test]
+	fn successful_swap() {
+		new_test_ext().execute_with(|| {
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+
+			assert_ok!(Dex::swap_assets(
+                RuntimeOrigin::signed(ALICE_ID),
+                ASSET_ID_A,
+                ASSET_ID_B,
+                10,
+                1,
+            ));
+
+		});
+	}
+
 }

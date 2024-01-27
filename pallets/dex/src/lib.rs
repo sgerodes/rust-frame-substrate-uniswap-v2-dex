@@ -164,12 +164,26 @@ pub mod pallet {
 		},
 		LiquiditySupplied {
 			pool_id: PoolCompositeIdOf<T>,
-			liquidity_token_id: LpAssetId<T>,
 			asset_id_a: AssetIdOf<T>,
 			asset_id_b: AssetIdOf<T>,
 			amount_a: AssetBalanceOf<T>,
 			amount_b: AssetBalanceOf<T>,
 			liquidity_token_minted: AssetBalanceOf<T>,
+		},
+		LiquidityRemoved {
+			pool_id: PoolCompositeIdOf<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+			amount_a: AssetBalanceOf<T>,
+			amount_b: AssetBalanceOf<T>,
+			liquidity_token_burned: AssetBalanceOf<T>,
+		},
+		AssetsSwapped {
+			who: T::AccountId,
+			asset_id_in: AssetIdOf<T>,
+			asset_id_out: AssetIdOf<T>,
+			amount_in: AssetBalanceOf<T>,
+			amount_out: AssetBalanceOf<T>,
 		},
 	}
 
@@ -497,7 +511,6 @@ pub mod pallet {
 			pool_id: &PoolCompositeIdOf<T>,
 			input_asset_id: AssetIdOf<T>,
 			input_amount: AssetBalanceOf<T>,
-			output_asset_id: AssetIdOf<T>,
 			output_amount: AssetBalanceOf<T>,
 		) -> DispatchResult {
 			if pool.asset_a.asset == input_asset_id {
@@ -542,11 +555,28 @@ pub mod pallet {
 		}
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+
+		/// Initializes a liquidity pool for a pair of assets and mints liquidity tokens to the creator.
+		///
+		/// This function creates a new liquidity pool for a pair of distinct assets and credits the pool creator with liquidity tokens representing their share in the pool. The initial liquidity is defined by the amounts of the two assets provided.
+		///
+		/// # Parameters
+		/// - `origin`: The transaction origin, must be signed by the user initializing the pool.
+		/// - `asset_id_a`: The first asset in the pair.
+		/// - `asset_id_b`: The second asset in the pair.
+		/// - `amount_a`: The amount of the first asset to initialize the pool.
+		/// - `amount_b`: The amount of the second asset to initialize the pool.
+		///
+		/// # Errors
+		/// - Returns `DistinctAssetsRequired` if the two assets are the same.
+		/// - Returns `InsufficientLiquidityProvided` if the amounts of either asset are zero.
+		/// - Returns `InsufficientAccountBalance` if the user does not have enough balance of either asset.
+		/// - Returns `DuplicatePoolError` if a pool for the asset pair already exists.
+		///
+		/// # Events
+		/// - Emits `PoolCreated` event when a new liquidity pool is successfully created.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::default())]
 		pub fn initialise_pool_with_assets(
@@ -591,7 +621,6 @@ pub mod pallet {
 				asset_id_b: asset_id_b.clone(),
 				creator: who.clone(),
 				liquidity_token_id: liquidity_token_id.clone(),
-				//timestamp_or_block_number: <frame_system::Module<T>>::block_number(),
 			});
 
 			Self::transfer_assets_from_user_and_mint_lp_tokens(
@@ -608,6 +637,26 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Adds liquidity to an existing pool and mints liquidity tokens to the liquidity provider.
+		///
+		/// This function allows users to contribute additional liquidity to an existing pool. In return, the user receives liquidity tokens proportional to their contribution. These tokens can be later used to withdraw assets from the pool.
+		///
+		/// # Parameters
+		/// - `origin`: The transaction origin, must be signed by the user adding liquidity.
+		/// - `asset_id_a`: The first asset in the liquidity pair.
+		/// - `asset_id_b`: The second asset in the liquidity pair.
+		/// - `amount_a`: The amount of the first asset to add to the pool.
+		/// - `amount_b`: The amount of the second asset to add to the pool.
+		///
+		/// # Errors
+		/// - Returns `PoolNotFoundError` if the liquidity pool for the asset pair does not exist.
+		/// - Returns `DistinctAssetsRequired` if the input assets are the same.
+		/// - Returns `InsufficientLiquidityProvided` if the amounts of either asset are zero.
+		/// - Returns `InsufficientAccountBalance` if the user does not have enough balance of either asset.
+		/// - Returns `LiquidityTokenNotFound` if the liquidity token for the pool does not exist.
+		///
+		/// # Events
+		/// - Emits `LiquiditySupplied` event when liquidity is successfully added to the pool.
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::default())]
 		pub fn add_liquidity(
@@ -658,19 +707,40 @@ pub mod pallet {
 				asset_with_balance_b,
 			)?;
 
-			// Self::deposit_event(Event::LiquiditySupplied {
-			// 	pool_id,
-			// 	pool.liquidity_token_id.clone(),
-			// 	asset_id_a,
-			// 	asset_id_b,
-			// 	amount_a,
-			// 	amount_b,
-			// 	liquidity_token_minted: lp_token_amount_to_mint,
-			// });
+			Self::deposit_event(Event::LiquiditySupplied {
+				pool_id,
+				asset_id_a,
+				asset_id_b,
+				amount_a,
+				amount_b,
+				liquidity_token_minted: lp_token_amount,
+			});
 
 			Ok(())
 		}
 
+
+		/// Removes liquidity from a specified asset pair's pool and returns the underlying assets to the user.
+		///
+		/// This function allows liquidity providers to withdraw their share of liquidity from the pool.
+		/// The amount of liquidity to be removed is specified by `lp_amount_provided`.
+		/// The user must specify minimum amounts of assets (`min_amount_a` and `min_amount_b`) to protect against slippage.
+		///
+		/// # Parameters
+		/// - `origin`: The transaction origin, must be signed by the liquidity provider.
+		/// - `asset_id_a`: The first asset in the liquidity pair.
+		/// - `asset_id_b`: The second asset in the liquidity pair.
+		/// - `lp_amount_provided`: The amount of liquidity tokens the user wants to burn in exchange for the pool assets.
+		/// - `min_amount_a`: The minimum amount of the first asset the user is willing to receive.
+		/// - `min_amount_b`: The minimum amount of the second asset the user is willing to receive.
+		///
+		/// # Errors
+		/// - Returns `PoolNotFoundError` if the specified asset pair's pool does not exist.
+		/// - Returns `InsufficientLiquidityTokenBalance` if the user does not have enough liquidity tokens.
+		/// - Returns `SlippageLimitExceeded` if the actual amounts receivable are less than the specified minimums.
+		///
+		/// # Events
+		/// - Emits `LiquidityRemoved` event when liquidity is successfully removed.
 		#[pallet::call_index(2)]
 		#[pallet::weight(Weight::default())]
 		pub fn remove_liquidity(
@@ -730,21 +800,43 @@ pub mod pallet {
 				lp_amount_provided.clone(),
 			)?;
 
-			// Self::deposit_event(Event::LiquidityRemoved {
-			// 	pool_id,
-			// 	asset_id_a,
-			// 	asset_id_b,
-			// 	amount_a,
-			// 	amount_b,
-			// 	liquidity_token_burned: liquidity_token_amount,
-			// });
+			Self::deposit_event(Event::LiquidityRemoved {
+				pool_id,
+				asset_id_a,
+				asset_id_b,
+				amount_a,
+				amount_b,
+				liquidity_token_burned: lp_amount_provided,
+			});
 
 			Ok(())
 		}
 
-		/// A * B = k
-		/// (A + a) * (B - b) = k
-		/// b = B - (k / (A + a))
+		/// Executes a swap of one asset for another in a specified liquidity pool while maintaining the invariant \( A \times B = k \).
+		///
+		/// The swap is executed based on the constant product formula: \( (A + a) \times (B - b) = k \), where:
+		/// - \( A \) and \( B \) are the initial reserves of the two assets in the pool,
+		/// - \( a \) is the input amount,
+		/// - \( b \) is the output amount.
+		///
+		/// The function calculates \( b \) as \( B - (k / (A + a)) \), ensuring the invariant holds.
+		///
+		/// # Parameters
+		/// - `origin`: The transaction origin, must be signed by the user initiating the swap.
+		/// - `asset_id_in`: The asset being provided by the user.
+		/// - `asset_id_out`: The asset the user wishes to receive.
+		/// - `amount_in`: The amount of the input asset being swapped.
+		/// - `min_amount_out`: The minimum amount of the output asset the user is willing to accept.
+		///
+		/// # Errors
+		/// - Returns `PoolNotFoundError` if the liquidity pool for the asset pair does not exist.
+		/// - Returns `DistinctAssetsRequired` if the input and output assets are the same.
+		/// - Returns `InvalidLiquidityCalculation` if the input amount is zero.
+		/// - Returns `SlippageLimitExceeded` if the output amount is less than the specified minimum.
+		///
+		/// # Events
+		/// - Emits `AssetsSwapped` event when a swap is successfully executed.
+		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::default())]
 		pub fn swap_assets(
 			origin: OriginFor<T>,
@@ -786,17 +878,16 @@ pub mod pallet {
 				&pool_id,
 				asset_id_in.clone(),
 				amount_in,
-				asset_id_out,
 				amount_out,
 			)?;
 
-			// Self::deposit_event(Event::AssetsSwapped {
-			// 	who,
-			// 	asset_id_in.clone(),
-			// 	asset_id_out.clone(),
-			// 	amount_in,
-			// 	amount_out,
-			// });
+			Self::deposit_event(Event::AssetsSwapped {
+				who,
+				asset_id_in,
+				asset_id_out,
+				amount_in,
+				amount_out,
+			});
 
 			Ok(())
 		}

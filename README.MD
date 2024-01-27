@@ -1,6 +1,12 @@
-# CoDex Pallet Extrinsics Documentation
+# CoDex Pallet Documentation
 
  ![image](images/2.png)
+
+The CoDEX Pallet Project is a Decentralized Exchange designed for the Substrate blockchain framework. 
+It enables the creation and management of liquidity pools for asset pairs, allowing users to trade different digital assets efficiently. 
+The platform supports key functionalities such as initializing pools with specified asset pairs, adding or removing liquidity, and conducting asset swaps while maintaining liquidity balance. 
+It employs a constant product formula to ensure liquidity and price stability. 
+Additionally, the project incorporates a variety of error checks and safeguards to ensure smooth and secure operations. 
 
 ## Extrinsics Overview
 The DEX pallet's extrinsics are designed to interact with liquidity pools on the blockchain, enabling the creation, management, and usage of these pools. Each extrinsic performs specific roles and has built-in checks to ensure transactions are valid and secure.

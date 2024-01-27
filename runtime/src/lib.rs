@@ -27,8 +27,6 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-// A few exports that help ease life for downstream crates.
-use frame_support::pallet_prelude::Get;
 use frame_support::PalletId;
 pub use frame_support::{
 	construct_runtime, parameter_types,

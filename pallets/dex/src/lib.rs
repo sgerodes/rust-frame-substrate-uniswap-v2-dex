@@ -551,6 +551,50 @@ pub mod pallet {
 				.checked_mul(&pool.get_asset_b_balance())
 				.ok_or(Error::<T>::ArithmeticsOverflow.into())
 		}
+
+		/// Retrieves the current price ratio of a specified asset pair from the liquidity pool.
+		///
+		/// This function provides a read-only query to determine the price of one asset in terms of another within a given liquidity pool. It computes the price as a ratio of the provided asset amounts in the pool. This function is useful for obtaining market information without modifying the state of the blockchain.
+		///
+		/// # Parameters
+		/// - `asset_id_a`: The identifier of the first asset in the pair.
+		/// - `asset_id_b`: The identifier of the second asset in the pair.
+		///
+		/// # Returns
+		/// - Returns the price of `asset_id_a` in terms of `asset_id_b` as an `AssetBalanceOf<T>`.
+		///
+		/// # Errors
+		/// - Returns `DistinctAssetsRequired` if the two assets are the same, as a price ratio requires distinct assets.
+		/// - Returns `PoolNotFoundError` if the liquidity pool for the specified asset pair does not exist.
+		/// - Returns `ArithmeticsOverflow` if the calculation of the price ratio overflows, which can occur with extremely large asset amounts.
+		///
+		/// # Example
+		/// To obtain the price of `asset_id_a` in terms of `asset_id_b`, you would call `get_price(asset_id_a, asset_id_b)`. The function will return the amount of `asset_id_b` that is equivalent to one unit of `asset_id_a` based on the current state of the liquidity pool.
+		///
+		/// # Note
+		/// This function does not alter the state of the blockchain and can be used for off-chain queries. It is not a transactional call and does not involve any fees or modifications to the ledger.
+		pub fn get_price(
+			origin: OriginFor<T>,
+			asset_id_a: AssetIdOf<T>,
+			asset_id_b: AssetIdOf<T>,
+		) -> Result<AssetBalanceOf<T>, DispatchError> {
+			let _who = ensure_signed(origin)?;
+			ensure!(asset_id_a != asset_id_b, Error::<T>::DistinctAssetsRequired);
+			let pool_id =
+				Self::derive_pool_id_from_assets(asset_id_a.clone(), asset_id_b.clone());
+			let pool = Self::get_pool_by_id(&pool_id).ok_or(Error::<T>::PoolNotFoundError)?;
+			let (amount_a, amount_b) = if pool.asset_a.asset == asset_id_a {
+				(pool.asset_a.amount, pool.asset_b.amount)
+			} else {
+				(pool.asset_b.amount, pool.asset_a.amount)
+			};
+
+			let price = amount_a
+				.checked_div(&amount_b)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+
+			Ok(price)
+		}
 	}
 
 	#[pallet::call]
@@ -890,5 +934,6 @@ pub mod pallet {
 
 			Ok(())
 		}
+
 	}
 }

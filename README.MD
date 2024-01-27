@@ -10,7 +10,43 @@ Additionally, the project incorporates a variety of error checks and safeguards 
 
 ## Fee calculation
 
-The dex incorporates a fee. Currently the fee logic is very simple. Each swap holds the fee from the input amount 
+Our decentralized exchange (DEX) implements a fee mechanism to incentivize liquidity provision. 
+The current fee structure is straightforward: a fixed percentage is deducted from the input amount of each swap transaction.
+
+### Current Fee Logic
+Fee Deduction: During each swap, a predetermined fee is subtracted from the amount of the asset being swapped. 
+This approach encourages users to contribute liquidity to the pools, as it increases the potential for earning fees from swap transactions.
+### Simplicity and Potential Drawbacks:
+The current fee model is basic and does not account for the duration for which liquidity providers (LPs) have held their tokens in the pool. This could lead to a scenario where newer LPs gain a disproportionate advantage over long-term holders, as the fee benefits are immediate and uniform, regardless of holding duration.
+
+### Future Enhancements
+Dynamic and Fairer Fee System: We are planning to refine the fee calculation in upcoming releases. 
+The new system will consider the length of time for which LPs have held their tokens in the pool. 
+This change aims to create a more balanced and equitable fee distribution, 
+rewarding long-term liquidity providers for their sustained contribution to the pool's health and stability.
+
+### Conclusion
+The fee mechanism is a crucial component of our DEX, 
+balancing incentives between traders and liquidity providers.
+While effective in its current form, we are committed to evolving this feature to better serve our diverse user base and enhance the 
+overall fairness and efficiency of the platform. Stay tuned for updates in future releases.
+
+## Price Oracle Functionality
+
+Our DEX pallet includes a get_price function, which serves as a simple price oracle. 
+This function allows users to query the current price ratio of a pair of assets from the liquidity pool. 
+It is a read-only query and does not modify the state of the blockchain.
+
+#### Purpose
+The get_price function is designed to provide quick and easy access to market price information within the DEX. It is particularly useful for applications that require up-to-date pricing data for trading strategies, risk assessments, or other financial analyses.
+
+### Functionality
+#### Query Price Ratio: 
+Retrieves the price of one asset in terms of another based on their current ratios in the liquidity pool.
+#### Read-Only: 
+Does not change the state of the blockchain and can be used for off-chain queries.
+#### Error Handling: 
+Includes checks for distinct assets and pool existence.
 
 
 ## Extrinsics Overview

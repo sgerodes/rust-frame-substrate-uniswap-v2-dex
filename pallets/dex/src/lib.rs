@@ -73,11 +73,19 @@ pub mod pallet {
 	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 	#[scale_info(skip_type_params(T))]
 	pub struct LiquidityPool<T: Config> {
-		//asset_ids: (AssetIdOf<T>, AssetIdOf<T>),
-		//balances: (AssetBalanceOf<T>, AssetBalanceOf<T>),
 		asset_a: AssetWithBalance<T>,
 		asset_b: AssetWithBalance<T>,
 		liquidity_token_id: LpAssetId<T>,
+	}
+
+	impl<T: Config> LiquidityPool<T> {
+		pub fn get_asset_a_balance(&self) -> AssetBalanceOf<T> {
+			self.asset_a.amount
+		}
+
+		pub fn get_asset_b_balance(&self) -> AssetBalanceOf<T> {
+			self.asset_b.amount
+		}
 	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -441,7 +449,7 @@ pub mod pallet {
 					amount_b.clone(),
 				);
 
-			let lp_token_amount_to_mint = Self::calculate_lp_token_amount(amount_a, amount_b)?;
+			let lp_token_amount = Self::calculate_lp_token_amount(amount_a, amount_b)?;
 			let pool_account = Self::derive_pool_account_from_id(&pool_id)?;
 
 			Self::transfer_assets_and_mint_lp_tokens(
@@ -452,14 +460,20 @@ pub mod pallet {
 				amount_b,
 				pool_account.clone(),
 				pool.liquidity_token_id.clone(),
-				lp_token_amount_to_mint.clone(),
+				lp_token_amount.clone(),
 			)?;
 
 			// Update pool balances
-			pool.asset_a.amount =
-				pool.asset_a.amount.checked_add(&asset_with_balance_a.amount).ok_or(Error::<T>::ArithmeticsOverflow)?;
-			pool.asset_b.amount =
-				pool.asset_b.amount.checked_add(&asset_with_balance_b.amount).ok_or(Error::<T>::ArithmeticsOverflow)?;
+			pool.asset_a.amount = pool
+				.asset_a
+				.amount
+				.checked_add(&asset_with_balance_a.amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
+			pool.asset_b.amount = pool
+				.asset_b
+				.amount
+				.checked_add(&asset_with_balance_b.amount)
+				.ok_or(Error::<T>::ArithmeticsOverflow)?;
 
 			Pools::<T>::insert(&pool_id, pool);
 

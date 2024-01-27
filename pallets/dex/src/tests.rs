@@ -1,44 +1,40 @@
+use crate::mock::{new_test_ext, Test};
 use crate::{mock::*, Error, Event};
 use crate::{Config, Pallet};
+use codec::Compact;
+use frame_support::traits::fungibles::Inspect;
 use frame_support::traits::fungibles::Mutate;
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::traits::AccountIdConversion;
 
-use crate::mock::{new_test_ext, Test};
+const ALICE_ID: u64 = 2;
+const BOB_ID: u64 = 3;
+const ASSET_ID_A: u32 = 1;
+const ASSET_ID_B: u32 = 2;
+const ASSET_ID_C: u32 = 3;
+
+fn mint_token(receiver: u64, token: u32, amount: u128) {
+	assert_ok!(Dex::mint_asset(RuntimeOrigin::root(), token, receiver, amount));
+}
+
+fn mint_token_creating(receiver: u64, token: u32, amount: u128) {
+	let _ = Dex::create_token_if_not_exists(token);
+	mint_token(receiver, token, amount);
+}
+
+fn set_up_alice_with_100_a_b_coins() {
+	mint_token_creating(ALICE_ID, ASSET_ID_A, 100);
+	mint_token_creating(ALICE_ID, ASSET_ID_B, 100);
+}
+
+fn set_up_bob_with_100_a_b_coins() {
+	mint_token_creating(BOB_ID, ASSET_ID_A, 100);
+	mint_token_creating(BOB_ID, ASSET_ID_B, 100);
+}
 
 #[cfg(test)]
 mod dex_tests {
 	use super::*;
-	use crate::mock::{new_test_ext, Test};
-	use crate::{mock::*, Error};
-	use codec::Compact;
-	use frame_support::traits::fungibles::Inspect;
-	use frame_support::{assert_noop, assert_ok};
-
-	const ALICE_ID: u64 = 2;
-	const BOB_ID: u64 = 3;
-	const ASSET_ID_A: u32 = 1;
-	const ASSET_ID_B: u32 = 2;
-	const ASSET_ID_C: u32 = 3;
-
-	fn mint_token(receiver: u64, token: u32, amount: u128) {
-		assert_ok!(Dex::mint_asset(RuntimeOrigin::root(), token, receiver, amount));
-	}
-
-	fn mint_token_creating(receiver: u64, token: u32, amount: u128) {
-		let _ = Dex::create_token_if_not_exists(token);
-		mint_token(receiver, token, amount);
-	}
-
-	fn set_up_alice_with_100_a_b_coins() {
-		mint_token_creating(ALICE_ID, ASSET_ID_A, 100);
-		mint_token_creating(ALICE_ID, ASSET_ID_B, 100);
-	}
-
-	fn set_up_bob_with_100_a_b_coins() {
-		mint_token_creating(BOB_ID, ASSET_ID_A, 100);
-		mint_token_creating(BOB_ID, ASSET_ID_B, 100);
-	}
 
 	#[test]
 	fn fail_create_pool_with_identical_assets() {
@@ -285,6 +281,53 @@ mod dex_tests {
 			);
 			assert_eq!(Dex::get_balance(&ALICE_ID, ASSET_ID_A), 0);
 			assert_eq!(Dex::get_balance(&ALICE_ID, ASSET_ID_B), 0);
+		});
+	}
+}
+
+mod liquidity_tests {
+	use super::*;
+
+	#[test]
+	fn successful_liquidity_addition() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			set_up_alice_with_100_a_b_coins();
+
+			assert_ok!(Dex::initialise_pool_with_assets(
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				50,
+				50
+			));
+
+			// Verify that Alice's LP token balance has increased
+			let liquidity_token_id =
+				Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
+			let alice_lp_balance_after_init = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert!(alice_lp_balance_after_init > 0, "Alice should have received LP tokens");
+
+			assert_ok!(Dex::add_liquidity(
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				25,
+				25
+			));
+
+			// Verify that Alice's LP token balance has increased
+			let alice_lp_balance_after_add = Dex::get_balance(&ALICE_ID, liquidity_token_id);
+			assert!(alice_lp_balance_after_add > alice_lp_balance_after_init, "Alice should have received LP tokens");
+
+			// Verify that the pool's asset balances have increased
+			let pool_id = Dex::create_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let pool = Dex::get_pool_by_id(&pool_id).expect("Pool should exist");
+
+			assert_eq!(pool.get_asset_a_balance(), 75, "Asset A balance should be 75");
+			assert_eq!(pool.get_asset_b_balance(), 75, "Asset B balance should be 75");
+
 		});
 	}
 }

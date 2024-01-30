@@ -52,7 +52,7 @@ fn alice_initializes_pool_a_with_25_and_b_with_75() {
 	));
 }
 
-fn assert_last_event_is_equal<E>(expected_event: E)
+fn assert_last_event_matches<E>(expected_event: E)
 where
 	E: Into<RuntimeEvent>,
 {
@@ -60,7 +60,7 @@ where
 	System::assert_last_event(expected_event.into());
 }
 
-fn assert_event_is_present<F>(mut event_checker: F)
+fn assert_event_exists_by_predicate<F>(mut event_checker: F)
 where
 	F: FnMut(&crate::Event<Test>) -> bool,
 {
@@ -252,7 +252,7 @@ mod pool_creation_tests {
 			));
 			let lp_id = Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
 
-			assert_event_is_present(|event| {
+			assert_event_exists_by_predicate(|event| {
 				matches!(
 					event,
 					Event::PoolCreated {
@@ -461,7 +461,7 @@ mod add_liquidity_tests {
 				amount_b: liquidity_b,
 				liquidity_token_minted: Dex::calculate_lp_token_amount(liquidity_a, liquidity_b).unwrap(),
 			};
-			assert_last_event_is_equal::<crate::Event<Test>>(expected_event.into());
+			assert_last_event_matches::<crate::Event<Test>>(expected_event.into());
 		});
 	}
 

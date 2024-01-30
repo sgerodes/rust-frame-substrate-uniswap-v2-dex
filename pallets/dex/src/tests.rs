@@ -56,7 +56,6 @@ fn assert_last_event_matches<E>(expected_event: E)
 where
 	E: Into<RuntimeEvent>,
 {
-
 	System::assert_last_event(expected_event.into());
 }
 
@@ -168,8 +167,8 @@ mod dex_internal_functions_tests {
 }
 
 mod pool_creation_tests {
-	use crate::Event;
 	use super::*;
+	use crate::Event;
 
 	#[test]
 	fn fail_create_pool_with_identical_assets() {
@@ -324,8 +323,8 @@ mod pool_creation_tests {
 }
 
 mod add_liquidity_tests {
-	use crate::Event;
 	use super::*;
+	use crate::Event;
 
 	#[test]
 	fn successful_liquidity_addition() {
@@ -446,12 +445,12 @@ mod add_liquidity_tests {
 			let liquidity_b = 25;
 
 			assert_ok!(Dex::add_liquidity(
-                RuntimeOrigin::signed(ALICE_ID),
-                ASSET_ID_A,
-                ASSET_ID_B,
-                liquidity_a,
-                liquidity_b
-            ));
+				RuntimeOrigin::signed(ALICE_ID),
+				ASSET_ID_A,
+				ASSET_ID_B,
+				liquidity_a,
+				liquidity_b
+			));
 
 			let expected_event = Event::LiquiditySupplied {
 				pool_id,
@@ -459,12 +458,12 @@ mod add_liquidity_tests {
 				asset_id_b: ASSET_ID_B,
 				amount_a: liquidity_a,
 				amount_b: liquidity_b,
-				liquidity_token_minted: Dex::calculate_lp_token_amount(liquidity_a, liquidity_b).unwrap(),
+				liquidity_token_minted: Dex::calculate_lp_token_amount(liquidity_a, liquidity_b)
+					.unwrap(),
 			};
 			assert_last_event_matches::<crate::Event<Test>>(expected_event.into());
 		});
 	}
-
 }
 
 #[cfg(test)]

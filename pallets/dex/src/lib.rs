@@ -479,6 +479,10 @@ pub mod pallet {
 		/// A * B = k
 		/// (A + a) * (B - b) = k
 		/// b = B - (k / (A + a))
+		///
+		/// b = B - ((A * B) / (A + a))
+		/// b = B - ((A * B) / (A + a))
+		/// b = B - (A / (A + a) * B / (A + a))
 		fn calculate_swap_amount(
 			pool: &LiquidityPool<T>,
 			input_asset_id: AssetIdOf<T>,

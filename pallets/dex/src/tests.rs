@@ -52,6 +52,30 @@ fn alice_initializes_pool_a_with_25_and_b_with_75() {
 	));
 }
 
+fn assert_last_event_is_equal<E>(expected_event: E)
+where
+	E: Into<RuntimeEvent>,
+{
+
+	System::assert_last_event(expected_event.into());
+}
+
+fn assert_event_is_present<F>(mut event_checker: F)
+where
+	F: FnMut(&crate::Event<Test>) -> bool,
+{
+	let mut found = false;
+	for record in System::events() {
+		if let RuntimeEvent::Dex(event) = &record.event {
+			if event_checker(event) {
+				found = true;
+				break;
+			}
+		}
+	}
+	assert!(found, "Failed to find the specified event");
+}
+
 #[cfg(test)]
 mod dex_internal_functions_tests {
 	use super::*;
@@ -144,6 +168,7 @@ mod dex_internal_functions_tests {
 }
 
 mod pool_creation_tests {
+	use crate::Event;
 	use super::*;
 
 	#[test]
@@ -225,36 +250,24 @@ mod pool_creation_tests {
 				10,
 				10
 			));
-			let _pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
 			let lp_id = Dex::derive_liquidity_token_id_for_pair(ASSET_ID_A, ASSET_ID_B);
-			// Assert that the correct event was deposited
-			// let expected_event = Event::PoolCreated {
-			// 	pool_id,
-			// 	creator: BOB_ID,
-			// 	asset_id_a: ASSET_ID_A,
-			// 	asset_id_b: ASSET_ID_B,
-			// };
-			// System::assert_last_event(expected_event.into());
 
-			let mut found = false;
-			for event in System::events() {
-				if let RuntimeEvent::Dex(crate::Event::PoolCreated {
-					asset_id_a,
-					asset_id_b,
-					creator,
-					liquidity_token_id,
-					..
-				}) = event.event
-				{
-					assert_eq!(asset_id_a, ASSET_ID_A);
-					assert_eq!(asset_id_b, ASSET_ID_B);
-					assert_eq!(creator, BOB_ID);
-					assert_eq!(liquidity_token_id, lp_id);
-					found = true;
-					break;
-				}
-			}
-			assert!(found, "Failed to find PoolCreated event");
+			assert_event_is_present(|event| {
+				matches!(
+					event,
+					Event::PoolCreated {
+						asset_id_a,
+						asset_id_b,
+						creator,
+						liquidity_token_id,
+						..
+					}
+					if *asset_id_a == ASSET_ID_A &&
+					*asset_id_b == ASSET_ID_B &&
+					*creator == BOB_ID &&
+					*liquidity_token_id == lp_id
+				)
+			});
 		});
 	}
 
@@ -311,6 +324,7 @@ mod pool_creation_tests {
 }
 
 mod add_liquidity_tests {
+	use crate::Event;
 	use super::*;
 
 	#[test]
@@ -420,6 +434,37 @@ mod add_liquidity_tests {
 			);
 		});
 	}
+
+	#[test]
+	fn adding_liquidity_emits_correct_event() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			set_up_alice_with_100_a_b_coins();
+			alice_initializes_pool_a_b_with_50();
+			let pool_id = Dex::derive_pool_id_from_assets(ASSET_ID_A, ASSET_ID_B);
+			let liquidity_a = 25;
+			let liquidity_b = 25;
+
+			assert_ok!(Dex::add_liquidity(
+                RuntimeOrigin::signed(ALICE_ID),
+                ASSET_ID_A,
+                ASSET_ID_B,
+                liquidity_a,
+                liquidity_b
+            ));
+
+			let expected_event = Event::LiquiditySupplied {
+				pool_id,
+				asset_id_a: ASSET_ID_A,
+				asset_id_b: ASSET_ID_B,
+				amount_a: liquidity_a,
+				amount_b: liquidity_b,
+				liquidity_token_minted: Dex::calculate_lp_token_amount(liquidity_a, liquidity_b).unwrap(),
+			};
+			assert_last_event_is_equal::<crate::Event<Test>>(expected_event.into());
+		});
+	}
+
 }
 
 #[cfg(test)]
